@@ -36,6 +36,7 @@ object ExuType{
   def vmisc = 11
   def vfp = 12
   def vint = 13
+  def sldu = 17
 
   private val mapping = Map(
     jmp -> "jmp",
@@ -51,11 +52,12 @@ object ExuType{
     vred -> "vred",
     vmisc -> "vmisc",
     vfp -> "vfp",
-    vint -> "vint"
+    vint -> "vint",
+    sldu -> "sldu"
   )
 
   def intTypes: Seq[Int] = Seq(jmp, alu, mul, div)
-  def memTypes: Seq[Int] = Seq(ldu, sta, std)
+  def memTypes: Seq[Int] = Seq(ldu, sta, std, sldu)
   def fpTypes: Seq[Int] = Seq(fmisc, fmac, fdiv)
   def vecTypes: Seq[Int] = Seq(vred, vmisc, vfp, vint)
   def typeToString(in:Int):String = mapping(in)

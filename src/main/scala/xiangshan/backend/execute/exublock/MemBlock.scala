@@ -99,7 +99,15 @@ class MemBlock(val parentName:String = "Unknown")(implicit p: Parameters) extend
       exuType = ExuType.std
     )
   })
+  private val specialLduParams = ExuConfig(
+    name = "SpecialLduExu",
+    id = 0,
+    complexName = "MemComplex",
+    fuConfigs = Seq(FuConfigs.specialLduCfg),
+    exuType = ExuType.sldu
+  )
   val lduIssueNodes: Seq[ExuInputNode] = lduParams.zipWithIndex.map(e => new ExuInputNode(e._1))
+  val specialLduIssueNode: MemoryBlockIssueNode = new MemoryBlockIssueNode((specialLduParams,0))
   val lduWritebackNodes: Seq[ExuOutputNode] = lduParams.map(new ExuOutputNode(_))
   val staIssueNodes: Seq[ExuInputNode] = staParams.zipWithIndex.map(e => new ExuInputNode(e._1))
   val staWritebackNodes: Seq[ExuOutputNode] = staParams.map(new ExuOutputNode(_))
@@ -116,6 +124,7 @@ class MemBlock(val parentName:String = "Unknown")(implicit p: Parameters) extend
   private val allWritebackNodes = lduWritebackNodes ++ staWritebackNodes ++ stdWritebackNodes
 
   memIssueRouters.foreach(mir => mir.node :*= issueNode)
+  specialLduIssueNode :*= issueNode
   allWritebackNodes.foreach(onode => writebackNode :=* onode)
 
   val dcache = LazyModule(new DCacheWrapper(parentName = parentName + "dcache_"))
@@ -138,6 +147,8 @@ class MemBlockImp(outer: MemBlock) extends BasicExuBlockImp(outer)
     require(iss.in.length == 1)
     iss.in.head._1
   })
+  private val sludIssue = outer.specialLduIssueNode.in.head._1
+  require(outer.specialLduIssueNode.in.length == 1)
   private val staIssues = outer.staIssueNodes.map(iss => {
     require(iss.in.length == 1)
     iss.in.head._1
@@ -389,15 +400,22 @@ class MemBlockImp(outer: MemBlock) extends BasicExuBlockImp(outer)
   for(j <- 0 until TriggerNum)
     PrintTriggerInfo(tEnable(j), tdata(j))
   // LoadUnit
+  sludIssue.rsFeedback := DontCare
   for (i <- 0 until exuParameters.LduCnt) {
     loadUnits(i).io.bankConflictAvoidIn := (i % 2).U
     loadUnits(i).io.redirect := Pipe(redirectIn)
     lduIssues(i).rsFeedback.feedbackSlowLoad := loadUnits(i).io.feedbackSlow
     lduIssues(i).rsFeedback.feedbackFastLoad := loadUnits(i).io.feedbackFast
-    loadUnits(i).io.rsIdx := lduIssues(i).rsIdx
-    loadUnits(i).io.isFirstIssue := lduIssues(i).rsFeedback.isFirstIssue // NOTE: just for dtlb's perf cnt
+    val bnpi = outer.lduIssueNodes(i).in.head._2._1.bankNum / exuParameters.LduCnt
+    val selSldu = sludIssue.issue.valid && sludIssue.rsIdx.bankIdxOH(bnpi * i + bnpi - 1, bnpi * i).andR
+    loadUnits(i).io.rsIdx := Mux(selSldu, sludIssue.rsIdx, lduIssues(i).rsIdx)
+    loadUnits(i).io.isFirstIssue := Mux(selSldu, sludIssue.rsFeedback.isFirstIssue, lduIssues(i).rsFeedback.isFirstIssue)
     // get input form dispatch
-    loadUnits(i).io.ldin <> lduIssues(i).issue
+    loadUnits(i).io.ldin.valid := Mux(selSldu, sludIssue.issue.valid, lduIssues(i).issue.valid)
+    loadUnits(i).io.ldin.bits := Mux(selSldu,sludIssue.issue.bits, lduIssues(i).issue.bits)
+    sludIssue.issue.ready := loadUnits(i).io.ldin.ready
+    lduIssues(i).issue.ready := loadUnits(i).io.ldin.ready
+    when(selSldu){assert(lduIssues(i).issue.valid === false.B)}
     // dcache access
     loadUnits(i).io.dcache <> dcache.io.lsu.load(i)
     // forward
@@ -413,8 +431,8 @@ class MemBlockImp(outer: MemBlock) extends BasicExuBlockImp(outer)
     //cancel
     io.earlyWakeUpCancel.foreach(w => w(i) := RegNext(loadUnits(i).io.cancel,false.B))
     // prefetch
-    val pcDelay1Valid = RegNext(lduIssues(i).issue.fire, false.B)
-    val pcDelay1Bits = RegEnable(lduIssues(i).issue.bits.uop.cf.pc, lduIssues(i).issue.fire)
+    val pcDelay1Valid = RegNext(loadUnits(i).io.ldin.fire, false.B)
+    val pcDelay1Bits = RegEnable(loadUnits(i).io.ldin.bits.uop.cf.pc, loadUnits(i).io.ldin.fire)
     val pcDelay2Bits = RegEnable(pcDelay1Bits, pcDelay1Valid)
     prefetcherOpt.foreach(pf => {
       pf.io.ld_in(i).valid := Mux(pf_train_on_hit,
