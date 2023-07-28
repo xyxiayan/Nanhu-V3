@@ -107,8 +107,9 @@ class MemoryReservationBank(entryNum:Int, stuNum:Int, lduNum:Int, wakeupWidth:In
   statusArray.io.enq.bits.addrOH := io.enq.bits.addrOH
   statusArray.io.enq.bits.data := EnqToEntry(io.enq.bits.data)
   statusArray.io.staLduIssue.valid := (io.issue.valid && io.isStaLduIssue) || io.specialIssue.valid
+  assert(PopCount(Seq(io.specialIssue.valid, io.issue.valid && io.isStaLduIssue)) <= 1.U)
   statusArray.io.stdIssue.valid := io.issue.valid && !io.isStaLduIssue
-  statusArray.io.staLduIssue.bits := Mux(io.issue.valid, io.issue.bits, 0.U) | Mux(io.specialIssue.valid, io.specialIssue.bits, 0.U)
+  statusArray.io.staLduIssue.bits := Mux(io.issue.valid && io.isStaLduIssue, io.issue.bits, 0.U) | Mux(io.specialIssue.valid, io.specialIssue.bits, 0.U)
   statusArray.io.stdIssue.bits := io.issue.bits
   statusArray.io.replay := io.replay
   statusArray.io.stIssued.zip(io.stIssued).foreach({case(a, b) => a := Pipe(b)})
