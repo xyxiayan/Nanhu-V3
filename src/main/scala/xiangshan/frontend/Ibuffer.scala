@@ -141,7 +141,12 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
     io.out(i).bits := ibuf.io.rdata(i).toCtrlFlow
     // some critical bits are from the fast path
     val isJump = io.out(i).bits.pd.valid && (io.out(i).bits.pd.isJal || io.out(i).bits.pd.isJalr)
-    io.out(i).valid := Mux(isJump && !ibuf.io.rdata(i).mmioFetch, validVec(i) && (io.out(i).bits.ftqPtr < (io.fromFtq - 1.U)), validVec(i))
+    val isMMIO = ibuf.io.rdata(i).mmioFetch
+    when(isJump){
+      io.out(i).valid := Mux(isMMIO, validVec(i) && (io.out(i).bits.ftqPtr < (io.fromFtq - 1.U)), validVec(i) && validVec(i + 1))
+    }.otherwise{
+      io.out(i).valid := validVec(i)
+    }
     val fastData = deqData(i).toCtrlFlow
     io.out(i).bits.instr := fastData.instr
     io.out(i).bits.exceptionVec := fastData.exceptionVec
