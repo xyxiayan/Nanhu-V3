@@ -128,16 +128,17 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   }
 
   // Dequeue
-  val validVec = Mux(validEntries >= DecodeWidth.U,
-    ((1 << DecodeWidth) - 1).U,
-    UIntToMask(validEntries(log2Ceil(DecodeWidth) - 1, 0), DecodeWidth)
+  val validVec = Mux(validEntries >= (DecodeWidth + 1).U,
+    ((1 << (DecodeWidth + 1)) - 1).U,
+    UIntToMask(validEntries(log2Ceil(DecodeWidth + 1) - 1, 0), DecodeWidth + 1)
   )
   val deqData = Reg(Vec(DecodeWidth, new IBufEntry))
   for (i <- 0 until DecodeWidth) {
-    io.out(i).valid := validVec(i)
     // by default, all bits are from the data module (slow path)
     io.out(i).bits := ibuf.io.rdata(i).toCtrlFlow
     // some critical bits are from the fast path
+    val isJump = io.out(i).bits.pd.valid && (io.out(i).bits.pd.isJal || io.out(i).bits.pd.isJalr)
+    io.out(i).valid := Mux(isJump, validVec(i) && validVec(i + 1), validVec(i))
     val fastData = deqData(i).toCtrlFlow
     io.out(i).bits.instr := fastData.instr
     io.out(i).bits.exceptionVec := fastData.exceptionVec
