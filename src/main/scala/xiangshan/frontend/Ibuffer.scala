@@ -106,7 +106,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
   val allowEnq = RegInit(true.B)
 
   val numEnq = Mux(io.in.fire, PopCount(io.in.bits.valid), 0.U)
-  val numTryDeq = Mux(validEntries >= DecodeWidth.U, DecodeWidth.U, validEntries)
+  val numTryDeq = PopCount(io.out.map(_.valid))
   val numDeq = Mux(io.out.head.ready, numTryDeq, 0.U)
   deqPtrVecNext := Mux(io.out.head.ready, VecInit(deqPtrVec.map(_ + numTryDeq)), deqPtrVec)
 
