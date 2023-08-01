@@ -34,6 +34,7 @@ class IBufferIO(implicit p: Parameters) extends XSBundle {
   val in = Flipped(DecoupledIO(new FetchToIBuffer))
   val out = Vec(DecodeWidth, DecoupledIO(new CtrlFlow))
   val full = Output(Bool())
+  val fromFtq = Input(new FtqPtr)
 }
 
 class IBufEntry(implicit p: Parameters) extends XSBundle {
@@ -140,7 +141,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
     io.out(i).bits := ibuf.io.rdata(i).toCtrlFlow
     // some critical bits are from the fast path
     val isJump = io.out(i).bits.pd.valid && (io.out(i).bits.pd.isJal || io.out(i).bits.pd.isJalr)
-    io.out(i).valid := Mux(isJump && !ibuf.io.rdata(i).mmioFetch, validVec(i) && validVec(i + 1), validVec(i))
+    io.out(i).valid := Mux(isJump && !ibuf.io.rdata(i).mmioFetch, validVec(i) && (io.out(i).bits.ftqPtr < (io.fromFtq - 1.U)), validVec(i))
     val fastData = deqData(i).toCtrlFlow
     io.out(i).bits.instr := fastData.instr
     io.out(i).bits.exceptionVec := fastData.exceptionVec

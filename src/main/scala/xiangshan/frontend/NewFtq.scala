@@ -447,6 +447,7 @@ class Ftq(parentName:String = "Unknown")(implicit p: Parameters) extends XSModul
     val toIfu = new FtqToIfuIO
     val toICache = new FtqToICacheIO
     val toBackend = new FtqToCtrlIO
+    val toIbuffer = Valid(new FtqPtr)
 
     val toPrefetch = new FtqPrefechBundle
 
@@ -622,6 +623,8 @@ class Ftq(parentName:String = "Unknown")(implicit p: Parameters) extends XSModul
 
   bpuPtr := bpuPtr + enq_fire
   copied_bpu_ptr.map(_ := bpuPtr + enq_fire)
+  io.toIbuffer.bits := bpuPtr + enq_fire
+  io.toIbuffer.valid := enq_fire
   when (io.toIfu.req.fire && allowToIfu) {
     ifuPtr_write := ifuPtrPlus1
     ifuPtrPlus1_write := ifuPtrPlus2
@@ -638,6 +641,8 @@ class Ftq(parentName:String = "Unknown")(implicit p: Parameters) extends XSModul
   io.toIfu.flushFromBpu.s2.bits := bpu_s2_resp.ftq_idx
   when (bpu_s2_redirect) {
     bpuPtr := bpu_s2_resp.ftq_idx + 1.U
+    io.toIbuffer.bits := bpu_s2_resp.ftq_idx + 1.U
+    io.toIbuffer.valid := true.B
     copied_bpu_ptr.map(_ := bpu_s2_resp.ftq_idx + 1.U)
     // only when ifuPtr runs ahead of bpu s2 resp should we recover it
     when (!isBefore(ifuPtr, bpu_s2_resp.ftq_idx)) {
@@ -651,6 +656,8 @@ class Ftq(parentName:String = "Unknown")(implicit p: Parameters) extends XSModul
   io.toIfu.flushFromBpu.s3.bits := bpu_s3_resp.ftq_idx
   when (bpu_s3_redirect) {
     bpuPtr := bpu_s3_resp.ftq_idx + 1.U
+    io.toIbuffer.valid := true.B
+    io.toIbuffer.bits := bpu_s3_resp.ftq_idx + 1.U
     copied_bpu_ptr.map(_ := bpu_s3_resp.ftq_idx + 1.U)
     // only when ifuPtr runs ahead of bpu s2 resp should we recover it
     when (!isBefore(ifuPtr, bpu_s3_resp.ftq_idx)) {
@@ -982,6 +989,8 @@ class Ftq(parentName:String = "Unknown")(implicit p: Parameters) extends XSModul
     val (idx, offset, flushItSelf) = (r.ftqIdx, r.ftqOffset, RedirectLevel.flushItself(r.level))
     val next = idx + 1.U
     bpuPtr := next
+    io.toIbuffer.bits := next
+    io.toIbuffer.valid := true.B
     copied_bpu_ptr.map(_ := next)
     ifuPtr_write := next
     ifuWbPtr_write := next
