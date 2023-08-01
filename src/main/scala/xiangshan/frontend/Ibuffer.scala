@@ -48,6 +48,7 @@ class IBufEntry(implicit p: Parameters) extends XSBundle {
   val acf = Bool()
   val crossPageIPFFix = Bool()
   val triggered = new TriggerCf
+  val mmioFetch = Bool()
 
   def fromFetch(fetch: FetchToIBuffer, i: Int): IBufEntry = {
     inst   := fetch.instrs(i)
@@ -61,6 +62,7 @@ class IBufEntry(implicit p: Parameters) extends XSBundle {
     acf := fetch.acf(i)
     crossPageIPFFix := fetch.crossPageIPFFix(i)
     triggered := fetch.triggered(i)
+    mmioFetch := fetch.mmioFetch
     this
   }
 
@@ -138,7 +140,7 @@ class Ibuffer(implicit p: Parameters) extends XSModule with HasCircularQueuePtrH
     io.out(i).bits := ibuf.io.rdata(i).toCtrlFlow
     // some critical bits are from the fast path
     val isJump = io.out(i).bits.pd.valid && (io.out(i).bits.pd.isJal || io.out(i).bits.pd.isJalr)
-    io.out(i).valid := Mux(isJump, validVec(i) && validVec(i + 1), validVec(i))
+    io.out(i).valid := Mux(isJump && !ibuf.io.rdata(i).mmioFetch, validVec(i) && validVec(i + 1), validVec(i))
     val fastData = deqData(i).toCtrlFlow
     io.out(i).bits.instr := fastData.instr
     io.out(i).bits.exceptionVec := fastData.exceptionVec
