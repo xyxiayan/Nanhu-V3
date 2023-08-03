@@ -125,25 +125,24 @@ case class XSCoreParameters
       (preds, ras.io.out)
     }),
   IBufSize: Int = 48,
-  DecodeWidth: Int = 6,
-  RenameWidth: Int = 6,
+  DecodeWidth: Int = 4,
+  RenameWidth: Int = 4,
   CommitWidth: Int = 6,
   FtqSize: Int = 64,
   EnableLoadFastWakeUp: Boolean = true, // NOTE: not supported now, make it false
-  IssQueSize: Int = 16,
-  NRPhyRegs: Int = 192,
+  NRPhyRegs: Int = 128,
   LoadQueueSize: Int = 80,
   LoadQueueNWriteBanks: Int = 8,
   StoreQueueSize: Int = 64,
   StoreQueueNWriteBanks: Int = 8,
-  RobSize: Int = 256,
+  RobSize: Int = 192,
   dpParams: DispatchParameters = DispatchParameters(
     IntDqSize = 16,
     FpDqSize = 16,
     LsDqSize = 16
   ),
-  intRsDepth:Int = 48,
-  fpRsDepth:Int = 48,
+  intRsDepth:Int = 32,
+  fpRsDepth:Int = 32,
   memRsDepth:Int = 48,
   rsBankNum:Int = 4,
   exuParameters: ExuParameters = ExuParameters(),
@@ -344,7 +343,6 @@ trait HasXSParameter {
   val RenameWidth = coreParams.RenameWidth
   val CommitWidth = coreParams.CommitWidth
   val FtqSize = coreParams.FtqSize
-  val IssQueSize = coreParams.IssQueSize
   val EnableLoadFastWakeUp = coreParams.EnableLoadFastWakeUp
   val NRPhyRegs = coreParams.NRPhyRegs
   val PhyRegIdxWidth = log2Up(NRPhyRegs)
