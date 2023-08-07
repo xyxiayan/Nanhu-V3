@@ -50,6 +50,9 @@ class MemoryReservationBank(entryNum:Int, stuNum:Int, lduNum:Int, wakeupWidth:In
     val isStaLduIssue = Input(Bool())
     val issueUop = Output(new MicroOp)
 
+    val specialIssue = Input(Valid(UInt(entryNum.W)))
+    val specialIssueUop = Output(new MicroOp)
+
     val replay = Input(Vec(3, Valid(new Replay(entryNum))))
 
     val stIssued = Input(Vec(stuNum, Valid(new RobPtr)))
@@ -62,7 +65,7 @@ class MemoryReservationBank(entryNum:Int, stuNum:Int, lduNum:Int, wakeupWidth:In
 
 
   private val statusArray = Module(new MemoryStatusArray(entryNum, stuNum, lduNum, wakeupWidth:Int))
-  private val payloadArray = Module(new PayloadArray(new MicroOp, entryNum, 1, "MemoryPayloadArray"))
+  private val payloadArray = Module(new PayloadArray(new MicroOp, entryNum, 2, "MemoryPayloadArray"))
 
   private def EnqToEntry(in: MicroOp): MemoryStatusArrayEntry = {
     val stIssueHit = io.stIssued.map(st => st.valid && st.bits === in.cf.waitForRobIdx).reduce(_|_)
@@ -103,9 +106,9 @@ class MemoryReservationBank(entryNum:Int, stuNum:Int, lduNum:Int, wakeupWidth:In
   statusArray.io.enq.valid := io.enq.valid
   statusArray.io.enq.bits.addrOH := io.enq.bits.addrOH
   statusArray.io.enq.bits.data := EnqToEntry(io.enq.bits.data)
-  statusArray.io.staLduIssue.valid := io.issue.valid && io.isStaLduIssue
+  statusArray.io.staLduIssue.valid := (io.issue.valid && io.isStaLduIssue) || io.specialIssue.valid
   statusArray.io.stdIssue.valid := io.issue.valid && !io.isStaLduIssue
-  statusArray.io.staLduIssue.bits := io.issue.bits
+  statusArray.io.staLduIssue.bits := Mux(io.issue.valid && io.isStaLduIssue, io.issue.bits, 0.U) | Mux(io.specialIssue.valid, io.specialIssue.bits, 0.U)
   statusArray.io.stdIssue.bits := io.issue.bits
   statusArray.io.replay := io.replay
   statusArray.io.stIssued.zip(io.stIssued).foreach({case(a, b) => a := Pipe(b)})
@@ -117,7 +120,9 @@ class MemoryReservationBank(entryNum:Int, stuNum:Int, lduNum:Int, wakeupWidth:In
   payloadArray.io.write.en := io.enq.valid
   payloadArray.io.write.addr := io.enq.bits.addrOH
   payloadArray.io.write.data := io.enq.bits.data
-  payloadArray.io.read.head.addr := io.issue.bits
-  io.issueUop := payloadArray.io.read.head.data
+  payloadArray.io.read(0).addr := io.issue.bits
+  io.issueUop := payloadArray.io.read(0).data
+  payloadArray.io.read(1).addr := io.specialIssue.bits
+  io.specialIssueUop := payloadArray.io.read(1).data
 }
 

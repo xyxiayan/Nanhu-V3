@@ -215,6 +215,22 @@ object FuConfigs{
     exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault),
   )
 
+  val specialLduCfg = FuConfig(
+    name = "sldu",
+    fuType = FuType.ldu,
+    numIntSrc = 1,
+    numFpSrc = 0,
+    numVecSrc = 0,
+    writeIntRf = true,
+    writeFpRf = true,
+    writeVecRf = false,
+    writeFflags = false,
+    latency = Int.MaxValue,
+    hasRedirect = true,
+    trigger = true,
+    exceptionOut = Seq(loadAddrMisaligned, loadAccessFault, loadPageFault),
+  )
+
   val staCfg = FuConfig(
     name = "sta",
     fuType = FuType.stu,

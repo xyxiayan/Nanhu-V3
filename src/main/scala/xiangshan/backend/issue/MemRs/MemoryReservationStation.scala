@@ -48,10 +48,17 @@ class MemoryReservationStation(implicit p: Parameters) extends LazyModule{
 class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam) extends LazyModuleImp(outer) with HasXSParameter {
   require(param.bankNum == 4)
   require(param.entriesNum % param.bankNum == 0)
-  private val issue = outer.issueNode.out.head._1 zip outer.issueNode.out.head._2._2
+  private val rawIssue = outer.issueNode.out.head._1 zip outer.issueNode.out.head._2._2
   private val wbIn = outer.wakeupNode.in.head
   private val wakeup = wbIn._1.zip(wbIn._2._1)
-  issue.foreach(elm => elm._2.exuConfigs.foreach(elm0 => require(ExuType.memTypes.contains(elm0.exuType))))
+  rawIssue.foreach(elm => elm._2.exuConfigs.foreach(elm0 => require(ExuType.memTypes.contains(elm0.exuType))))
+  private val issue = rawIssue.filterNot(_._2.isSpecialLoad)
+  private val specialLoadIssue = rawIssue.filter(_._2.isSpecialLoad)
+  require(specialLoadIssue.length == 1)
+  println("\nMemory Reservation Issue Ports Config:")
+  for ((iss, issuePortIdx) <- rawIssue.zipWithIndex) {
+    println(s"Issue Port $issuePortIdx ${iss._2}")
+  }
 
   private val staIssue = issue.filter(_._2.hasSta)
   private val stdIssue = issue.filter(_._2.hasStd)
@@ -66,7 +73,6 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
   require(stdIssue.nonEmpty && stdIssue.length <= param.bankNum && (param.bankNum % stdIssue.length) == 0)
   require(lduIssue.nonEmpty && lduIssue.length <= param.bankNum && (param.bankNum % lduIssue.length) == 0)
 
-  private val issueWidth = issue.length
   private val entriesNumPerBank = param.entriesNum / param.bankNum
 
   val io = IO(new Bundle{
@@ -177,10 +183,39 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
     rsBank.io.enq.bits.addrOH := fromAllocate.bits.addrOH
   }
 
+
+  private val specialIssueArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, lduIssuePortNum))
+  private val slRes = specialIssueArbiter.io.out
+  rsBankSeq.zip(slRes.bits.bankIdxOH.asBools).foreach({case(b, e) =>
+    b.io.specialIssue.valid := slRes.valid && e
+    b.io.specialIssue.bits := slRes.bits.entryIdxOH
+  })
+  private val specialLoadIssueDriver = Module(new DecoupledPipeline(false, param.bankNum, entriesNumPerBank))
+  specialLoadIssueDriver.io.redirect := io.redirect
+  specialLoadIssueDriver.io.earlyWakeUpCancel := io.earlyWakeUpCancel
+  specialLoadIssueDriver.io.enq.valid := slRes.valid
+  slRes.ready := specialLoadIssueDriver.io.enq.ready
+  specialLoadIssueDriver.io.enq.bits.entryIdxOH := slRes.bits.entryIdxOH
+  specialLoadIssueDriver.io.enq.bits.bankIdxOH := slRes.bits.bankIdxOH
+  specialLoadIssueDriver.io.enq.bits.uop := Mux1H(slRes.bits.bankIdxOH, rsBankSeq.map(_.io.specialIssueUop))
+  specialLoadIssueDriver.io.enq.bits.uop.robIdx := slRes.bits.info.robPtr
+  specialLoadIssueDriver.io.enq.bits.uop.ctrl.rfWen := slRes.bits.info.rfWen
+  specialLoadIssueDriver.io.enq.bits.uop.ctrl.fpWen := slRes.bits.info.fpWen
+  specialLoadIssueDriver.io.enq.bits.uop.pdest := slRes.bits.info.pdest
+  specialLoadIssueDriver.io.enq.bits.uop.ctrl.fuType := slRes.bits.info.fuType
+  specialLoadIssueDriver.io.enq.bits.uop.lpv := slRes.bits.info.lpv
+
+  specialLoadIssue.head._1.issue.valid := specialLoadIssueDriver.io.deq.valid
+  specialLoadIssue.head._1.issue.bits.uop := specialLoadIssueDriver.io.deq.bits.uop
+  specialLoadIssue.head._1.issue.bits.src := DontCare
+  specialLoadIssue.head._1.rsIdx.bankIdxOH := specialLoadIssueDriver.io.deq.bits.bankIdxOH
+  specialLoadIssue.head._1.rsIdx.entryIdxOH := specialLoadIssueDriver.io.deq.bits.entryIdxOH
+  specialLoadIssue.head._1.rsFeedback.isFirstIssue := false.B
+  specialLoadIssueDriver.io.deq.ready := specialLoadIssue.head._1.issue.ready
+
   private val issBankNum = param.bankNum / issue.length
-  println("\nMemory Reservation Issue Ports Config:")
+
   for((iss, issuePortIdx) <- issue.zipWithIndex) {
-    println(s"Issue Port $issuePortIdx ${iss._2}")
     prefix(iss._2.name + "_" + iss._2.id) {
       val issueDriver = Module(new DecoupledPipeline(false, param.bankNum, entriesNumPerBank))
       issueDriver.io.redirect := io.redirect
@@ -189,7 +224,11 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
       val respArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, 3))
       respArbiter.io.in(0) <> stdSelectNetwork.io.issueInfo(issuePortIdx)
       respArbiter.io.in(1) <> staSelectNetwork.io.issueInfo(issuePortIdx)
-      respArbiter.io.in(2) <> lduSelectNetwork.io.issueInfo(issuePortIdx)
+      respArbiter.io.in(2).valid := lduSelectNetwork.io.issueInfo(issuePortIdx).valid
+      respArbiter.io.in(2).bits := lduSelectNetwork.io.issueInfo(issuePortIdx).bits
+      specialIssueArbiter.io.in(issuePortIdx).valid := lduSelectNetwork.io.issueInfo(issuePortIdx).valid && !respArbiter.io.in(2).ready
+      specialIssueArbiter.io.in(issuePortIdx).bits := lduSelectNetwork.io.issueInfo(issuePortIdx).bits
+      lduSelectNetwork.io.issueInfo(issuePortIdx).ready := specialIssueArbiter.io.in(issuePortIdx).ready | respArbiter.io.in(2).ready
       val selResp = respArbiter.io.out
       val isStd =  respArbiter.io.chosen === 1.U
       val selectedBanks = rsBankSeq.slice(issuePortIdx * issBankNum, issuePortIdx * issBankNum + issBankNum)
@@ -214,16 +253,17 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
         })
       })
 
+      val lduIssueInfo = lduSelectNetwork.io.issueInfo(issuePortIdx)
       val earlyWakeupQueue = Module(new WakeupQueue(3))
-      earlyWakeupQueue.io.in.valid := selResp.fire && selResp.bits.info.fuType === FuType.ldu
+      earlyWakeupQueue.io.in.valid := lduIssueInfo.fire
       earlyWakeupQueue.io.earlyWakeUpCancel := io.earlyWakeUpCancel
-      earlyWakeupQueue.io.in.bits.robPtr := selResp.bits.info.robPtr
-      earlyWakeupQueue.io.in.bits.lpv := selResp.bits.info.lpv
-      earlyWakeupQueue.io.in.bits.pdest := selResp.bits.info.pdest
-      earlyWakeupQueue.io.in.bits.destType := Mux(selResp.bits.info.fpWen, SrcType.fp, Mux(selResp.bits.info.rfWen, SrcType.reg, SrcType.default))
+      earlyWakeupQueue.io.in.bits.robPtr := lduIssueInfo.bits.info.robPtr
+      earlyWakeupQueue.io.in.bits.lpv := lduIssueInfo.bits.info.lpv
+      earlyWakeupQueue.io.in.bits.pdest := lduIssueInfo.bits.info.pdest
+      earlyWakeupQueue.io.in.bits.destType := Mux(lduIssueInfo.bits.info.fpWen, SrcType.fp, Mux(lduIssueInfo.bits.info.rfWen, SrcType.reg, SrcType.default))
       earlyWakeupQueue.io.redirect := io.redirect
 
-      earlyWakeupQueue.io.in.bits.lpv(issuePortIdx) := selResp.bits.info.lpv(issuePortIdx) | (1 << (LpvLength - 1)).U
+      earlyWakeupQueue.io.in.bits.lpv(issuePortIdx) := lduIssueInfo.bits.info.lpv(issuePortIdx) | (1 << (LpvLength - 1)).U
       io.loadEarlyWakeup(issuePortIdx).valid := earlyWakeupQueue.io.out.valid
       io.loadEarlyWakeup(issuePortIdx).bits.robPtr := earlyWakeupQueue.io.out.bits.robPtr
       io.loadEarlyWakeup(issuePortIdx).bits.pdest := earlyWakeupQueue.io.out.bits.pdest
@@ -262,6 +302,7 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
       issueDriver.io.deq.ready := iss._1.issue.ready
     }
   }
+  println(s"Issue Port ${issue.length} ${specialLoadIssue.head._2}")
   println("\nMemory Reservation Wake Up Ports Config:")
   wakeup.zipWithIndex.foreach({ case ((_, cfg), idx) =>
     println(s"Wake Port $idx ${cfg.name} of ${cfg.complexName} #${cfg.id}")
