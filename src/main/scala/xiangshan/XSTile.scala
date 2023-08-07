@@ -127,7 +127,7 @@ class XSTile(val parentName:String = "Unknown")(implicit p: Parameters) extends 
     core.frontend.icache.clientNode
 
   val ptw_to_l2_buffers = if (!coreParams.softPTW) {
-    val (buffers, buf_node) = chainBuffer(5, "ptw_to_l2_buffer")
+    val (buffers, buf_node) = chainBuffer(3, "ptw_to_l2_buffer")
     misc.busPMU :=
       TLLogger(s"L2_PTW_${coreParams.HartId}", !debugOpts.FPGAPlatform) :=
       buf_node :=
@@ -142,7 +142,7 @@ class XSTile(val parentName:String = "Unknown")(implicit p: Parameters) extends 
         case Some(l2_recv_node) =>
         println("Connecting L1 prefetcher to L2!")
         l2_recv_node := core.exuBlock.memoryBlock.pf_sender_opt.get
-        case None => 
+        case None =>
       }
     case None =>
   }
