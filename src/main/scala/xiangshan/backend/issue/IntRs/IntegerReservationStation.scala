@@ -127,6 +127,7 @@ class IntegerReservationStationImpl(outer:IntegerReservationStation, param:RsPar
     busyTableAluWbPorts(aluWbPortIdx).bits := delayBitsReg.pdest
     extraAluWakeupSignals(aluWbPortIdx).valid := busyTableAluWbPorts(aluWbPortIdx).valid
     extraAluWakeupSignals(aluWbPortIdx).bits := delayBitsReg
+    extraAluWakeupSignals(aluWbPortIdx).bits.lpv.foreach(_ := 0.U)
     aluWbPortIdx = aluWbPortIdx + 1
   })
 
