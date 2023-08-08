@@ -78,7 +78,7 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
   val io = IO(new Bundle{
     val redirect = Input(Valid(new Redirect))
     val mulSpecWakeup = Input(Vec(p(XSCoreParamsKey).exuParameters.mulNum, Valid(new WakeUpInfo)))
-    val aluSpecWakeup = Input(Vec(2 * p(XSCoreParamsKey).exuParameters.aluNum, Valid(new WakeUpInfo)))
+    val aluSpecWakeup = Input(Vec(p(XSCoreParamsKey).exuParameters.aluNum, Valid(new WakeUpInfo)))
     val loadEarlyWakeup = Output(Vec(loadUnitNum, Valid(new EarlyWakeUpInfo)))
     val earlyWakeUpCancel = Input(Vec(loadUnitNum, Bool()))
     val stLastCompelet = Input(new SqPtr)

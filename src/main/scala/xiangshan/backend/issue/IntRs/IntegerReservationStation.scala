@@ -70,7 +70,7 @@ class IntegerReservationStationImpl(outer:IntegerReservationStation, param:RsPar
   val io = IO(new Bundle{
     val redirect = Input(Valid(new Redirect))
     val mulSpecWakeup = Output(Vec(mulIssuePortNum, Valid(new WakeUpInfo)))
-    val aluSpecWakeup = Output(Vec(2 * aluIssuePortNum, Valid(new WakeUpInfo)))
+    val aluSpecWakeup = Output(Vec(aluIssuePortNum, Valid(new WakeUpInfo)))
     val loadEarlyWakeup = Input(Vec(loadUnitNum, Valid(new EarlyWakeUpInfo)))
     val earlyWakeUpCancel = Input(Vec(loadUnitNum, Bool()))
     val integerAllocPregs = Vec(RenameWidth, Flipped(ValidIO(UInt(PhyRegIdxWidth.W))))
@@ -78,7 +78,7 @@ class IntegerReservationStationImpl(outer:IntegerReservationStation, param:RsPar
   require(outer.dispatchNode.in.length == 1)
   private val enq = outer.dispatchNode.in.map(_._1).head
 
-  private val internalAluWakeupSignals = Wire(Vec(2 * aluIssuePortNum, Valid(new WakeUpInfo)))
+  private val internalAluWakeupSignals = Wire(Vec(aluIssuePortNum, Valid(new WakeUpInfo)))
   private val internalMulWakeupSignals = Wire(Vec(mulIssuePortNum, Valid(new WakeUpInfo)))
   io.mulSpecWakeup.zip(internalMulWakeupSignals).foreach({case(a, b) =>
     //Add an pipe here for there is no bypass from mul to load/store units.
@@ -116,31 +116,19 @@ class IntegerReservationStationImpl(outer:IntegerReservationStation, param:RsPar
   })
   private val busyTableAluWbPorts = integerBusyTable.io.wbPregs.drop((wakeupSignals ++ internalMulWakeupSignals).length)
   private var aluWbPortIdx = 0
-  private var aluWkpPortAuxIdx = 0
   private var ioAluWkpPortIdx = 0
-  internalAluWakeupSignals.take(aluIssuePortNum).foreach(wb=> {
-    val shouldHold = Cat(wb.bits.lpv).orR
-    busyTableAluWbPorts(aluWbPortIdx).valid := wb.valid && wb.bits.destType === SrcType.reg && !shouldHold
-    busyTableAluWbPorts(aluWbPortIdx).bits := wb.bits.pdest
-    io.aluSpecWakeup(ioAluWkpPortIdx).valid := wb.valid && !shouldHold
-    io.aluSpecWakeup(ioAluWkpPortIdx).bits := wb.bits
-
-    val delayValidReg = RegNext(shouldHold && wb.valid, false.B)
-    val delayBitsReg = RegEnable(wb.bits, shouldHold && wb.valid)
+  internalAluWakeupSignals.foreach(wb=> {
+    val delayValidReg = RegNext(wb.valid, false.B)
+    val delayBitsReg = RegEnable(wb.bits, wb.valid)
     val shouldBeCancelled = delayBitsReg.lpv.zip(io.earlyWakeUpCancel).map({case(l,c) => l(0) && c}).reduce(_||_)
     val shouldBeFlushed = delayBitsReg.robPtr.needFlush(io.redirect)
-    busyTableAluWbPorts(aluWbPortIdx + 1).valid := delayValidReg && delayBitsReg.destType === SrcType.reg && !shouldBeCancelled && !shouldBeFlushed
-    busyTableAluWbPorts(aluWbPortIdx + 1).bits := delayBitsReg.pdest
-
-    internalAluWakeupSignals(aluWkpPortAuxIdx + aluIssuePortNum).valid := delayValidReg && !shouldBeCancelled && !shouldBeFlushed
-    internalAluWakeupSignals(aluWkpPortAuxIdx + aluIssuePortNum).bits := delayBitsReg
-    internalAluWakeupSignals(aluWkpPortAuxIdx + aluIssuePortNum).bits.lpv.foreach(_ := 0.U)
-    io.aluSpecWakeup(ioAluWkpPortIdx + 1).valid := delayValidReg && !shouldBeCancelled && !shouldBeFlushed
-    io.aluSpecWakeup(ioAluWkpPortIdx + 1).bits := delayBitsReg
-    io.aluSpecWakeup(ioAluWkpPortIdx + 1).bits.lpv.foreach(_ := 0.U)
-    aluWbPortIdx = aluWbPortIdx + 2
-    aluWkpPortAuxIdx = aluWkpPortAuxIdx + 1
-    ioAluWkpPortIdx = ioAluWkpPortIdx + 2
+    busyTableAluWbPorts(aluWbPortIdx).valid := delayValidReg && delayBitsReg.destType === SrcType.reg && !shouldBeCancelled && !shouldBeFlushed
+    busyTableAluWbPorts(aluWbPortIdx).bits := delayBitsReg.pdest
+    io.aluSpecWakeup(ioAluWkpPortIdx).valid := delayValidReg && !shouldBeCancelled && !shouldBeFlushed
+    io.aluSpecWakeup(ioAluWkpPortIdx).bits := delayBitsReg
+    io.aluSpecWakeup(ioAluWkpPortIdx).bits.lpv.foreach(_ := 0.U)
+    aluWbPortIdx = aluWbPortIdx + 1
+    ioAluWkpPortIdx = ioAluWkpPortIdx + 1
   })
 
   private val aluExuCfg = aluIssue.flatMap(_._2.exuConfigs).filter(_.exuType == ExuType.alu).head
