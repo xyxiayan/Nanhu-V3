@@ -24,8 +24,9 @@ import chisel3._
 import chisel3.util._
 import xiangshan.backend.execute.exu.ExuType
 import freechips.rocketchip.diplomacy._
-import xiangshan.{HasXSParameter, MemPredUpdateReq, Redirect}
+import xiangshan.{ExuOutput, HasXSParameter, MemPredUpdateReq, Redirect}
 import xiangshan.frontend.Ftq_RF_Components
+
 class WriteBackNetwork(implicit p:Parameters) extends LazyModule{
   val node = new WriteBackNetworkNode
 
@@ -48,25 +49,38 @@ class WriteBackNetwork(implicit p:Parameters) extends LazyModule{
     private val redirectGen = Module(new RedirectGen(jmpNum, aluNum, lduNum))
     io.pcReadAddr := redirectGen.io.pcReadAddr
     redirectGen.io.pcReadData := io.pcReadData
+    private val localRedirectReg = Pipe(redirectGen.io.redirectOut)
+
+    private def PipeWithRedirect(in: Valid[ExuOutput], latency: Int, p: Parameters): Valid[ExuOutput] = {
+      require(latency > 0)
+      val res = Wire(Valid(new ExuOutput()(p)))
+      val realIn = if (latency == 1) in else PipeWithRedirect(in, latency - 1, p)
+      val resValidReg = RegNext(realIn.valid, false.B)
+      val resDataReg = RegEnable(realIn.bits, realIn.valid)
+      val shouldBeFlushed = resDataReg.uop.robIdx.needFlush(localRedirectReg)
+      res.valid := resValidReg && !shouldBeFlushed
+      res.bits := resDataReg
+      res
+    }
 
     private var jmpRedirectIdx = 0
     private var aluRedirectIdx = 0
     private var memRedirectIdx = 0
     wbSources.filter(_._2.hasRedirectOut).foreach(source => {
       if(source._2.exuType == ExuType.jmp){
-        redirectGen.io.jmpWbIn(jmpRedirectIdx) := source._1
+        redirectGen.io.jmpWbIn(jmpRedirectIdx) := PipeWithRedirect(source._1, 1, p)
         jmpRedirectIdx = jmpRedirectIdx + 1
       } else if(source._2.exuType == ExuType.alu){
-        redirectGen.io.aluWbIn(aluRedirectIdx) := source._1
+        redirectGen.io.aluWbIn(aluRedirectIdx) := PipeWithRedirect(source._1, 1, p)
         aluRedirectIdx = aluRedirectIdx + 1
       } else if (source._2.exuType == ExuType.sta || source._2.exuType == ExuType.ldu) {
-        redirectGen.io.memWbIn(memRedirectIdx) := source._1
+        redirectGen.io.memWbIn(memRedirectIdx) := PipeWithRedirect(source._1, 1, p)
         memRedirectIdx = memRedirectIdx + 1
       } else {
         require(false, "Unexpected redirect out exu!")
       }
     })
-    private val localRedirectReg = Pipe(redirectGen.io.redirectOut)
+
     redirectGen.io.redirectIn := localRedirectReg
     io.redirectOut := redirectGen.io.redirectOut
     io.memPredUpdate := redirectGen.io.memPredUpdate
@@ -83,8 +97,7 @@ class WriteBackNetwork(implicit p:Parameters) extends LazyModule{
           realSrc.valid := RegNext(realValid, false.B) && !realSrc.bits.uop.robIdx.needFlush(localRedirectReg)
         }
         if(s._2._1.isRob){
-          dst.bits := RegEnable(realSrc.bits, realSrc.valid)
-          dst.valid := RegNext(realSrc.valid, false.B) && !dst.bits.uop.robIdx.needFlush(localRedirectReg)
+          dst := PipeWithRedirect(realSrc, 2, p)
         } else {
           dst := realSrc
         }

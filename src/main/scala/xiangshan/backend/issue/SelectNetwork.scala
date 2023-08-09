@@ -51,7 +51,8 @@ class SelectMux(bankIdxWidth:Int, entryIdxWidth:Int)(implicit p: Parameters) ext
   private val ptr0 = io.in0.bits.info.robPtr
   private val ptr1 = io.in1.bits.info.robPtr
   private val validVec = Cat(valid1, valid0)
-  private val sel = Mux(validVec === "b01".U, true.B, Mux(validVec === "b10".U, false.B, Mux(validVec === "b11".U, ptr0 < ptr1, true.B)))
+//  private val sel = Mux(validVec === "b01".U, true.B, Mux(validVec === "b10".U, false.B, Mux(validVec === "b11".U, ptr0 < ptr1, true.B)))
+  private val sel = Mux(validVec === "b01".U, true.B, Mux(validVec === "b10".U, false.B, false.B))
   private val res = Mux(sel, io.in0, io.in1)
   io.out := res
 }

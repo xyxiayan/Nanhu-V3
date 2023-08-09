@@ -49,7 +49,7 @@ object FuConfigs{
     writeFpRf = false,
     writeVecRf = false,
     writeFflags = false,
-    latency = 1, //Actual latency is 2. It is reduced to 1 because of bypass network
+    latency = 2,
     trigger = false,
     hasRedirect = false
   )
@@ -63,7 +63,7 @@ object FuConfigs{
     writeFpRf = false,
     writeVecRf = false,
     writeFflags = false,
-    latency = 1, //Actual latency is 2. It is reduced to 1 because of bypass network
+    latency = 2,
     trigger = false,
     hasRedirect = false
   )
@@ -135,7 +135,7 @@ object FuConfigs{
     writeFpRf = true,
     writeVecRf = false,
     writeFflags = true,
-    latency = 1, //Actual latency is 2. It is reduced to 1 because of bypass network
+    latency = 2,
     trigger = false,
     hasRedirect = false
   )
