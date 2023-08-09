@@ -472,7 +472,7 @@ class vaddrTriggerResultDataModule[T <: Data](
 
   val dataBanks = Seq.tabulate(numBanks)(i => {
     val bankEntries = if (i < numBanks - 1) maxBankEntries else numEntries - (i * maxBankEntries)
-    val dataBank = Module(new NegedgeDataModuleTemplate(dataType, bankEntries, numRead, numWrite, parentModule, perReadPortBypassEnable))
+    val dataBank = Module(new DataModuleTemplate(dataType, bankEntries, numRead, numWrite, parentModule, perReadPortBypassEnable))
 
     // delay one clock
 //    val raddr_dup = RegNext(io.raddr)
@@ -545,7 +545,7 @@ class LoadQueueVaddrModule[T <: Data](
 
   val dataBanks = Seq.tabulate(numBanks)(i => {
     val bankEntries = if (i < numBanks - 1) maxBankEntries else numEntries - (i * maxBankEntries)
-    val dataBank = Module(new NegedgeDataModuleTemplate(dataType, bankEntries, numRead, numWrite, parentModule, perReadPortBypassEnable))
+    val dataBank = Module(new DataModuleTemplate(dataType, bankEntries, numRead, numWrite, parentModule, perReadPortBypassEnable))
 
     // delay one clock
 //    val raddr_dup = RegNext(io.raddr)
