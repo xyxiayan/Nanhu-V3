@@ -63,18 +63,34 @@ class WriteBackNetwork(implicit p:Parameters) extends LazyModule{
       res
     }
 
+    private def RedirectPipe(in: Valid[ExuOutput], p: Parameters): Valid[ExuOutput] = {
+      val res = Wire(Valid(new ExuOutput()(p)))
+      val resValidReg = RegNext(in.valid, false.B)
+      val redirectValidReg = RegNext(in.bits.redirectValid, false.B)
+      val resUopReg = RegEnable(in.bits.uop, in.valid)
+      val redirectBitsReg = RegEnable(in.bits.redirect, in.bits.redirectValid)
+      res.valid := resValidReg && !resUopReg.robIdx.needFlush(localRedirectReg)
+      res.bits.redirectValid := redirectValidReg && !redirectBitsReg.robIdx.needFlush(localRedirectReg)
+      res.bits.uop := resUopReg
+      res.bits.redirect := redirectBitsReg
+      res.bits.data := DontCare
+      res.bits.fflags := DontCare
+      res.bits.debug := DontCare
+      res
+    }
+
     private var jmpRedirectIdx = 0
     private var aluRedirectIdx = 0
     private var memRedirectIdx = 0
     wbSources.filter(_._2.hasRedirectOut).foreach(source => {
       if(source._2.exuType == ExuType.jmp){
-        redirectGen.io.jmpWbIn(jmpRedirectIdx) := PipeWithRedirect(source._1, 1, p)
+        redirectGen.io.jmpWbIn(jmpRedirectIdx) := RedirectPipe(source._1, p)
         jmpRedirectIdx = jmpRedirectIdx + 1
       } else if(source._2.exuType == ExuType.alu){
-        redirectGen.io.aluWbIn(aluRedirectIdx) := PipeWithRedirect(source._1, 1, p)
+        redirectGen.io.aluWbIn(aluRedirectIdx) := RedirectPipe(source._1, p)
         aluRedirectIdx = aluRedirectIdx + 1
       } else if (source._2.exuType == ExuType.sta || source._2.exuType == ExuType.ldu) {
-        redirectGen.io.memWbIn(memRedirectIdx) := PipeWithRedirect(source._1, 1, p)
+        redirectGen.io.memWbIn(memRedirectIdx) := RedirectPipe(source._1, p)
         memRedirectIdx = memRedirectIdx + 1
       } else {
         require(false, "Unexpected redirect out exu!")
