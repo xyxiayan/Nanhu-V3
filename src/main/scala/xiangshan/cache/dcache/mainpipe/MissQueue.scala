@@ -424,7 +424,13 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   io.mem_acquire.bits.user.lift(AliasKey).foreach( _ := req.vaddr(13, 12))
   // trigger prefetch
   io.mem_acquire.bits.user.lift(PrefetchKey).foreach(_ := Mux(io.l2_pf_store_only, req.isStore, true.B))
+  // prefer not to cache data in L2 by default
+  // io.mem_acquire.bits.user.lift(PreferCacheKey).foreach(_ := false.B)
   require(nSets <= 256)
+
+  XSPerfAccumulate("missQueue_store_only", io.l2_pf_store_only)
+  XSPerfAccumulate("missQueue_trigger_prefetch", Mux(io.l2_pf_store_only, req.isStore, true.B))
+  XSPerfAccumulate("missQueue_trigger_prefetch_fire", io.mem_acquire.fire() && Mux(io.l2_pf_store_only, req.isStore, true.B))
 
   io.mem_grant.ready := !w_grantlast && s_acquire
 
@@ -518,6 +524,7 @@ class MissEntry(edge: TLEdgeOut)(implicit p: Parameters) extends DCacheModule {
   XSPerfAccumulate("penalty_waiting_for_channel_E", io.mem_finish.valid && !io.mem_finish.ready)
   XSPerfAccumulate("penalty_from_grant_to_refill", !w_refill_resp && w_grantlast)
   XSPerfAccumulate("soft_prefetch_number", primary_fire && io.req.bits.source === SOFT_PREFETCH.U)
+  XSPerfAccumulate("hard_prefetch_number", primary_fire && io.req.bits.source === HARDWARE_PREFETCH.U)
 
   val (mshr_penalty_sample, mshr_penalty) = TransactionLatencyCounter(RegNext(primary_fire), release_entry)
   XSPerfHistogram("miss_penalty", mshr_penalty, mshr_penalty_sample, 0, 20, 1, true, true)

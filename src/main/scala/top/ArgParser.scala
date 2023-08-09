@@ -89,6 +89,10 @@ object ArgParser {
           nextOption(config.alter((site, here, up) => {
             case DebugOptionsKey => up(DebugOptionsKey).copy(EnableTopDown = true)
           }), tail)
+        case "--enable-l1dpf" :: tail =>
+          nextOption(config.alter((site, here, up) => {
+            case XSTileKey => up(XSTileKey).foreach(_.copy(l1dprefetchRefill = Some(true)))
+          }), tail)
         case option :: tail =>
           // unknown option, maybe a firrtl option, skip
           firrtlOpts :+= option

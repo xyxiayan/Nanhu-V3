@@ -1047,6 +1047,14 @@ class SMSPrefetcher(parentName: String = "Unknown")(implicit p: Parameters) exte
   io.pf_addr.valid := pf_filter.io.l2_pf_addr.valid && io.enable && is_valid_address
   io.pf_addr.bits := pf_filter.io.l2_pf_addr.bits
 
+  coreParams.l1dprefetchRefill.map(_=>{
+    io.l1_pf_req.get.valid := pf_filter.io.l2_pf_addr.valid && io.enable && is_valid_address
+    io.l1_pf_req.get.bits.paddr := pf_filter.io.l2_pf_addr.bits
+    io.l1_pf_req.get.bits.alias := 0.U
+    io.l1_pf_req.get.bits.confidence := 1.U
+    io.l1_pf_req.get.bits.is_store := false.B
+  })
+
   XSPerfAccumulate("sms_pf_gen_conflict",
     pht_gen_valid && agt_gen_valid
   )

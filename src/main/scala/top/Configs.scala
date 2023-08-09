@@ -34,7 +34,7 @@ import device.{EnableJtag, XSDebugModuleParams}
 import huancun._
 import coupledL2._
 import coupledL3._
-import xiangshan.mem.prefetch.SMSParams
+import xiangshan.mem.prefetch.{SMSParams,StridePrefetcherParams}
 
 class BaseConfig(n: Int) extends Config((site, here, up) => {
   case XLen => 64
@@ -43,8 +43,10 @@ class BaseConfig(n: Int) extends Config((site, here, up) => {
   case PMParameKey => PMParameters()
   case XSTileKey => Seq.tabulate(n){
     i => XSCoreParameters(HartId = i, hasMbist = false, hasShareBus = false,
-    prefetcher = Some(SMSParams()))
-  }
+    prefetcher = Some(SMSParams()),
+    l1dprefetcher = Some(StridePrefetcherParams()),
+    l1dprefetchRefill = Some(true)
+    )}
   case ExportDebug => DebugAttachParams(protocols = Set(JTAG))
   case DebugModuleKey => Some(XSDebugModuleParams(site(XLen)))
   case JtagDTMKey => JtagDTMKey
@@ -80,7 +82,6 @@ class MinimalConfig(n: Int = 1) extends Config(
           LsDqSize = 12
         ),
         exuParameters = ExuParameters(),
-        prefetcher = None,
         icacheParameters = ICacheParameters(
           nSets = 64, // 16KB ICache
           tagECC = Some("parity"),
@@ -251,9 +252,22 @@ class WithNKBL2
         )),
         reqField = Seq(utility.ReqSourceField()),
         echoField = Seq(coupledL2.DirtyField()),
-        // prefetch = Some(coupledL2.prefetch.PrefetchReceiverParams()),
-        prefetch = Some(coupledL2.prefetch.PrefetchReceiverParams()),
-        elaboratedTopDown = false
+        elaboratedTopDown = false,
+        prefetch = Some(coupledL2.prefetch.HyperPrefetchParams()), /*
+        del L2 prefetche recv option, move into: prefetch =  PrefetchReceiverParams
+        prefetch options:
+          SPPParameters          => spp only
+          BOPParameters          => bop only
+          PrefetchReceiverParams => sms+bop
+          HyperPrefetchParams    => spp+bop+sms
+        */
+        sppMultiLevelRefill = None,//Some(coupledL2.prefetch.PrefetchReceiverParams()),
+        /*must has spp, otherwise Assert Fail
+        sppMultiLevelRefill options:
+        PrefetchReceiverParams() => spp has cross level refill
+        None                     => spp only refill L2
+        */
+        // prefetch = None
         // enablePerf = true,
         // sramDepthDiv = 2,
         // tagECC = None,
@@ -341,5 +355,12 @@ class DefaultConfig(n: Int = 1) extends Config(
   new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 8)
     ++ new WithNKBL2(256, inclusive = false, banks = 4, alwaysReleaseData = true)
     ++ new WithNKBL1D(64)
+    ++ new BaseConfig(n)
+)
+
+class NanHuV3Config(n: Int = 1) extends Config(
+  new WithNKBL3(6 * 1024, inclusive = false, banks = 4, ways = 6)
+    ++ new WithNKBL2(256, inclusive = false, banks = 4, alwaysReleaseData = true)
+    ++ new WithNKBL1D(32)
     ++ new BaseConfig(n)
 )
