@@ -29,7 +29,7 @@ class SelectRespArbiter(bankNum:Int, entryNum:Int, inNum:Int)(implicit p: Parame
     val chosen = Output(UInt(inNum.W))
   })
 
-  private val selector = Module(new SelectOldest(inNum))
+  private val selector = Module(new SelectPolicy(inNum, true))
   selector.io.in.zip(io.in).foreach({case(si, in) =>
     si.valid := in.valid
     si.bits := in.bits.info.robPtr
@@ -37,4 +37,5 @@ class SelectRespArbiter(bankNum:Int, entryNum:Int, inNum:Int)(implicit p: Parame
   io.out.valid := selector.io.out.valid
   io.out.bits := Mux1H(selector.io.out.bits, io.in.map(_.bits))
   io.chosen := selector.io.out.bits
+  io.in.map(_.ready).zip(io.chosen.asBools).foreach({ case(a, b) => a := b && io.out.ready})
 }
