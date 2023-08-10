@@ -137,11 +137,6 @@ case class XSCoreParameters
   StoreQueueSize: Int = 64,
   StoreQueueNWriteBanks: Int = 8,
   RobSize: Int = 192,
-  L1DPrefetchPipelineWidth: Int = 1,
-  RptTimeMax: Int = 1024, //tjz
-  SbpPrefetchSize: Int = 2, //tjz
-  L1dpbSize: Int = 16, //tjz
-  StrideOldListSize: Int = 16, //tjz
   dpParams: DispatchParameters = DispatchParameters(
     IntDqSize = 16,
     FpDqSize = 16,
@@ -153,9 +148,8 @@ case class XSCoreParameters
   rsBankNum:Int = 4,
   exuParameters: ExuParameters = ExuParameters(),
   // TODO: replace Coupled L2
-  prefetcher: Option[PrefetcherParams] = Some(SMSParams()),
-  l1dprefetcher: Option[PrefetcherParams] = None,
-  l1dprefetchRefill: Option[Boolean] = None,
+  // prefetcher: Option[PrefetcherParams] = Some(SMSParams()),
+  prefetcher: Option[PrefetcherParams] = None,
   LoadPipelineWidth: Int = 2,
   StorePipelineWidth: Int = 2,
   StoreBufferSize: Int = 16,
@@ -281,7 +275,6 @@ trait HasXSParameter {
   val PAddrBits = p(SoCParamsKey).PAddrBits // PAddrBits is Phyical Memory addr bits
 
   val coreParams = p(XSCoreParamsKey)
-  // val L2prefetch = p(L2ParamKey).prefetch
   val env = p(DebugOptionsKey)
 
   val XLEN = coreParams.XLEN
@@ -371,13 +364,6 @@ trait HasXSParameter {
   val NRPhyRegs = coreParams.NRPhyRegs
   val PhyRegIdxWidth = log2Up(NRPhyRegs)
   val RobSize = coreParams.RobSize
-
-  val L1dpbSize = coreParams.L1dpbSize //tjz
-  val StrideOldListSize = coreParams.StrideOldListSize //tjz
-  val RptTimeMax = coreParams.RptTimeMax //tjz
-  val SbpPrefetchSize = coreParams.SbpPrefetchSize //tjz
-  val L1DPrefetchPipelineWidth = coreParams.L1DPrefetchPipelineWidth
-
   val IntRefCounterWidth = log2Ceil(RobSize + 1)
   val LoadQueueSize = coreParams.LoadQueueSize
   val LoadQueueNWriteBanks = coreParams.LoadQueueNWriteBanks
