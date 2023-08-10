@@ -78,7 +78,7 @@ class WriteBackNetwork(implicit p:Parameters) extends LazyModule{
       res.bits.data := DontCare
       res.bits.fflags := DontCare
       res.bits.debug := DontCare
-      when(in.valid){assert(in.bits.uop.robIdx.needFlush(localRedirectReg))}
+      when(in.valid){assert(!in.bits.uop.robIdx.needFlush(localRedirectReg))}
       res
     }
 
