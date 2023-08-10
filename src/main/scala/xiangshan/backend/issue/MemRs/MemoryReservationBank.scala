@@ -124,5 +124,7 @@ class MemoryReservationBank(entryNum:Int, stuNum:Int, lduNum:Int, wakeupWidth:In
   io.issueUop := payloadArray.io.read(0).data
   payloadArray.io.read(1).addr := io.specialIssue.bits
   io.specialIssueUop := payloadArray.io.read(1).data
+  when(io.issue.valid){assert(PopCount(io.issue.bits) === 1.U)}
+  when(io.specialIssue.valid){assert(PopCount(io.specialIssue.bits) === 1.U)}
 }
 

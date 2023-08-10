@@ -41,20 +41,29 @@ class SelectResp(val bankIdxWidth:Int, entryIdxWidth:Int)(implicit p: Parameters
   val bankIdxOH = UInt(bankIdxWidth.W)
 }
 
-class SelectOldest(width:Int)(implicit p: Parameters) extends Module{
+class SelectPolicy(width:Int, oldest:Boolean)(implicit p: Parameters) extends Module{
   val io = IO(new Bundle{
     val in = Input(Vec(width, Valid(new RobPtr)))
     val out = Output(Valid(UInt(width.W)))
   })
-  private val onlyOne = PopCount(io.in.map(_.valid)) === 0.U
-  private val oldestOH = Cat(io.in.zipWithIndex.map({case(port, idx) =>
-    io.in.zipWithIndex.filterNot(_._2 == idx).map(i => Mux(i._1.valid, port.bits < i._1.bits, false.B)).reduce(_|_)
-  }).reverse)
-  private val defaultValue = Cat(io.in.map(_.valid).reverse)
-
-  io.out.valid := io.in.map(_.valid).reduce(_|_)
-  io.out.bits := Mux(onlyOne, defaultValue, oldestOH)
-
+  override val desiredName:String = s"SelectPolicy_w${width}_" + (if(oldest)"o" else "p")
+  if(oldest) {
+    val onlyOne = PopCount(io.in.map(_.valid)) === 1.U
+    val oldestOHMatrix = io.in.zipWithIndex.map({ case (self, idx) =>
+      io.in.zipWithIndex.filterNot(_._2 == idx).map(i => (i._1.valid && self.valid && (self.bits < i._1.bits)) ^ i._1.valid)
+    })
+    val oldestOHSeq = oldestOHMatrix.map(_.reduce(_|_)).map(!_)
+    val oldestOH = Cat(oldestOHSeq.reverse)
+    val defaultValue = Cat(io.in.map(_.valid).reverse)
+    io.out.valid := io.in.map(_.valid).reduce(_ | _)
+    io.out.bits := Mux(onlyOne, defaultValue, oldestOH)
+  } else {
+    io.out.valid := io.in.map(_.valid).reduce(_ | _)
+    io.out.bits := PriorityEncoderOH(Cat(io.in.map(_.valid).reverse))
+  }
+  when(io.out.valid) {
+    assert(PopCount(io.out.bits) === 1.U)
+  }
 }
 /** {{{
   * Module Name: SelectedNetwork
@@ -96,7 +105,7 @@ class SelectOldest(width:Int)(implicit p: Parameters) extends Module{
   * }}}
 */
 
-class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, name:Option[String] = None)(implicit p: Parameters) extends XSModule {
+class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, oldest:Boolean, name:Option[String] = None)(implicit p: Parameters) extends XSModule {
   require(issueNum <= bankNum && 0 < issueNum && bankNum % issueNum == 0, "Illegal number of issue ports are supported now!")
   private val fuTypeList = cfg.fuConfigs.map(_.fuType)
   val io = IO(new Bundle{
@@ -109,10 +118,10 @@ class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, 
   override val desiredName:String = name.getOrElse("SelectNetwork")
 
   private val selectResultsPerBank = io.selectInfo.zipWithIndex.map({case(si, bidx) =>
-    val primaryResult = Valid(new SelectResp(bankNum, entryNum))
-    val primarySelector = Module(new SelectOldest(bankNum))
+    val primaryResult = Wire(Valid(new SelectResp(bankNum, entryNum)))
+    val primarySelector = Module(new SelectPolicy(entryNum,oldest))
     primarySelector.io.in.zip(si).foreach({case(a, b) =>
-      a.valid := b.valid
+      a.valid := b.valid && cfg.fuConfigs.map(_.fuType === b.bits.fuType).reduce(_|_)
       a.bits := b.bits.robPtr
     })
     primaryResult.valid := primarySelector.io.out.valid
@@ -127,15 +136,15 @@ class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, 
     finalSelectResult.zip(selectResultsPerBank).foreach({case(a, b) => a := b})
   } else {
     val bankNumPerIss = bankNum / issueNum
-    finalSelectResult.zipWithIndex.foreach({case(p, i) =>
+    finalSelectResult.zipWithIndex.foreach({case(res, i) =>
       val selBanks = selectResultsPerBank.slice(i * bankNumPerIss, i * bankNumPerIss + bankNumPerIss)
-      val secondarySelector = Module(new SelectOldest(bankNumPerIss))
+      val secondarySelector = Module(new SelectPolicy(bankNumPerIss, oldest))
       secondarySelector.io.in.zip(selBanks).foreach({ case (a, b) =>
         a.valid := b.valid
         a.bits := b.bits.info.robPtr
       })
-      p.valid := secondarySelector.io.out.valid
-      p.bits := Mux1H(secondarySelector.io.out.bits, selBanks.map(_.bits))
+      res.valid := secondarySelector.io.out.valid
+      res.bits := Mux1H(secondarySelector.io.out.bits, selBanks.map(_.bits))
     })
   }
 
