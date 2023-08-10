@@ -65,17 +65,20 @@ class WriteBackNetwork(implicit p:Parameters) extends LazyModule{
 
     private def RedirectPipe(in: Valid[ExuOutput], p: Parameters): Valid[ExuOutput] = {
       val res = Wire(Valid(new ExuOutput()(p)))
-      val resValidReg = RegNext(in.valid, false.B)
-      val redirectValidReg = RegNext(in.bits.redirectValid, false.B)
-      val resUopReg = RegEnable(in.bits.uop, in.valid)
-      val redirectBitsReg = RegEnable(in.bits.redirect, in.bits.redirectValid)
-      res.valid := resValidReg && !resUopReg.robIdx.needFlush(localRedirectReg)
-      res.bits.redirectValid := redirectValidReg && !redirectBitsReg.robIdx.needFlush(localRedirectReg)
-      res.bits.uop := resUopReg
+      val uopValid = in.valid && !in.bits.uop.robIdx.needFlush(localRedirectReg)
+      val redirectValid = in.bits.redirectValid && !in.bits.redirect.robIdx.needFlush(localRedirectReg)
+      val uopValidReg = RegNext(uopValid, false.B)
+      val redirectValidReg = RegNext(redirectValid, false.B)
+      val uopBitsReg = RegEnable(in.bits.uop, uopValid)
+      val redirectBitsReg = RegEnable(in.bits.redirect, redirectValid)
+      res.valid := uopValidReg
+      res.bits.redirectValid := redirectValidReg
+      res.bits.uop := uopBitsReg
       res.bits.redirect := redirectBitsReg
       res.bits.data := DontCare
       res.bits.fflags := DontCare
       res.bits.debug := DontCare
+      when(in.valid){assert(in.bits.uop.robIdx.needFlush(localRedirectReg))}
       res
     }
 
