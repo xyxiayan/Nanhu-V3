@@ -72,7 +72,7 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   val nacked_ready     = true.B
 
   // ready can wait for valid
-  io.lsu.req.ready := (!io.nack && not_nacked_ready) || (io.nack && nacked_ready)
+  io.lsu.req.ready := ((!io.nack && not_nacked_ready) || (io.nack && nacked_ready))
   io.meta_read.valid := io.lsu.req.fire() && !io.nack
   io.tag_read.valid := io.lsu.req.fire() && !io.nack
 
@@ -97,7 +97,7 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   val s0_req = io.lsu.req.bits
   val s0_fire = s0_valid && s1_ready
 
-  assert(RegNext(!(s0_valid && (s0_req.cmd =/= MemoryOpConstants.M_XRD && s0_req.cmd =/= MemoryOpConstants.M_PFR && s0_req.cmd =/= MemoryOpConstants.M_PFW))), "LoadPipe only accepts load req / softprefetch read or write!")
+  assert(RegNext(!(s0_valid && (s0_req.cmd =/= MemoryOpConstants.M_XRD && s0_req.cmd =/= MemoryOpConstants.M_PFR && s0_req.cmd =/= MemoryOpConstants.M_PFW))), "LoadPipe only accepts load req / softprefetch read or write! /hardprefetch read")
   dump_pipeline_reqs("LoadPipe s0", s0_valid, s0_req)
 
   // --------------------------------------------------------------------------------
@@ -362,6 +362,8 @@ class LoadPipe(id: Int)(implicit p: Parameters) extends DCacheModule with HasPer
   XSPerfAccumulate("load_miss_or_conflict", io.lsu.resp.fire() && resp.bits.miss)
   XSPerfAccumulate("actual_ld_fast_wakeup", s1_fire && s1_tag_match_dup_dc && !io.disable_ld_fast_wakeup)
   XSPerfAccumulate("ideal_ld_fast_wakeup", io.banked_data_read.fire() && s1_tag_match_dup_dc)
+  XSPerfAccumulate("l1d_hwprefetch_r_miss",s1_fire && s1_req.cmd===MemoryOpConstants.M_PFR && !s1_hit)
+  XSPerfAccumulate("l1d_prefetch_r_hit",s1_fire && s1_req.cmd===MemoryOpConstants.M_PFR && s1_hit)
 
   val perfEvents = Seq(
     ("load_req                 ", io.lsu.req.fire()                                               ),

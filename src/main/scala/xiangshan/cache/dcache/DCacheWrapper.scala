@@ -106,6 +106,9 @@ trait HasDCacheParameters extends HasL1CacheParameters {
   def STORE_SOURCE = 1
   def AMO_SOURCE = 2
   def SOFT_PREFETCH = 3
+  def HARDWARE_PREFETCH = 4
+
+  def HW_PREFETCH_STRIDE = 5
 
   // each source use a id to distinguish its multiple reqs
   def reqIdWidth = log2Up(nEntries) max log2Up(StoreBufferSize)
@@ -414,6 +417,13 @@ class DCacheLoadIO(implicit p: Parameters) extends DCacheWordIO
 
   // debug
   val debug_s1_hit_way = Input(UInt(nWays.W))
+}
+
+class DCacheToPrefetchIO(implicit p: Parameters) extends DCacheWordIO
+{
+  val s1_kill  = Output(Bool())
+  val s2_kill  = Output(Bool())
+  val s1_paddr = Output(UInt(PAddrBits.W))
 }
 
 class DCacheLineIO(implicit p: Parameters) extends DCacheBundle

@@ -34,7 +34,7 @@ import device.{EnableJtag, XSDebugModuleParams}
 import huancun._
 import coupledL2._
 import coupledL3._
-import xiangshan.mem.prefetch.SMSParams
+import xiangshan.mem.prefetch.{SMSParams,StridePrefetcherParams}
 
 class BaseConfig(n: Int) extends Config((site, here, up) => {
   case XLen => 64
@@ -43,8 +43,10 @@ class BaseConfig(n: Int) extends Config((site, here, up) => {
   case PMParameKey => PMParameters()
   case XSTileKey => Seq.tabulate(n){
     i => XSCoreParameters(HartId = i, hasMbist = false, hasShareBus = false,
-    prefetcher = Some(SMSParams()))
-  }
+    prefetcher = Some(SMSParams()),
+    l1dprefetcher = Some(StridePrefetcherParams()),
+    l1dprefetchRefill = Some(true)
+    )}
   case ExportDebug => DebugAttachParams(protocols = Set(JTAG))
   case DebugModuleKey => Some(XSDebugModuleParams(site(XLen)))
   case JtagDTMKey => JtagDTMKey
@@ -64,6 +66,7 @@ class MinimalConfig(n: Int = 1) extends Config(
         DecodeWidth = 2,
         RenameWidth = 2,
         FetchWidth = 4,
+//        IssQueSize = 8,
         NRPhyRegs = 64,
         LoadQueueSize = 16,
         LoadQueueNWriteBanks = 4,
@@ -250,10 +253,23 @@ class WithNKBL2
           aliasBitsOpt = p.dcacheParametersOpt.get.aliasBitsOpt
         )),
         reqField = Seq(utility.ReqSourceField()),
-        echoField = Seq(coupledL2.DirtyField()),
-        // prefetch = Some(coupledL2.prefetch.PrefetchReceiverParams()),
+        echoField = Seq(huancun.DirtyField()),
+        elaboratedTopDown = false,
         prefetch = Some(coupledL2.prefetch.PrefetchReceiverParams()),
-        elaboratedTopDown = false
+        /*
+        del L2 prefetche recv option, move into: prefetch =  PrefetchReceiverParams
+        prefetch options:
+          SPPParameters          => spp only
+          BOPParameters          => bop only
+          PrefetchReceiverParams => sms+bop
+          HyperPrefetchParams    => spp+bop+sms
+        */
+//        sppMultiLevelRefill = Some(coupledL2.prefetch.PrefetchReceiverParams()),
+        /*must has spp, otherwise Assert Fail
+        sppMultiLevelRefill options:
+        PrefetchReceiverParams() => spp has cross level refill
+        None                     => spp only refill L2
+        */
         // enablePerf = true,
         // sramDepthDiv = 2,
         // tagECC = None,
@@ -311,6 +327,7 @@ class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1
             blockGranularity = log2Ceil(clientDirBytes / core.L2NBanks / l2params.ways / 64 / tiles.size)
           )
         },
+        prefetch=None,
         enablePerf = false,
         tagEccCode = None,
         dataEccCode = None
