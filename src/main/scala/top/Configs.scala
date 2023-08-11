@@ -253,10 +253,9 @@ class WithNKBL2
           aliasBitsOpt = p.dcacheParametersOpt.get.aliasBitsOpt
         )),
         reqField = Seq(utility.ReqSourceField()),
-        echoField = Seq(huancun.DirtyField()),
+        echoField = Seq(coupledL2.DirtyField()),
         elaboratedTopDown = false,
-        prefetch = Some(coupledL2.prefetch.PrefetchReceiverParams()),
-        /*
+        prefetch = Some(coupledL2.prefetch.HyperPrefetchParams()), /*
         del L2 prefetche recv option, move into: prefetch =  PrefetchReceiverParams
         prefetch options:
           SPPParameters          => spp only
@@ -264,12 +263,13 @@ class WithNKBL2
           PrefetchReceiverParams => sms+bop
           HyperPrefetchParams    => spp+bop+sms
         */
-//        sppMultiLevelRefill = Some(coupledL2.prefetch.PrefetchReceiverParams()),
+        sppMultiLevelRefill = None,//Some(coupledL2.prefetch.PrefetchReceiverParams()),
         /*must has spp, otherwise Assert Fail
         sppMultiLevelRefill options:
         PrefetchReceiverParams() => spp has cross level refill
         None                     => spp only refill L2
         */
+        // prefetch = None
         // enablePerf = true,
         // sramDepthDiv = 2,
         // tagECC = None,
@@ -327,7 +327,6 @@ class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1
             blockGranularity = log2Ceil(clientDirBytes / core.L2NBanks / l2params.ways / 64 / tiles.size)
           )
         },
-        prefetch=None,
         enablePerf = false,
         tagEccCode = None,
         dataEccCode = None
@@ -360,3 +359,4 @@ class DefaultConfig(n: Int = 1) extends Config(
     ++ new WithNKBL1D(64)
     ++ new BaseConfig(n)
 )
+

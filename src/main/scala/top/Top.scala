@@ -86,7 +86,24 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
     misc.peripheral_ports(i) := core_with_l2(i).uncache
     misc.core_to_l3_ports(i) :=* core_with_l2(i).memory_port
   }
+    
+  // (core_with_l2.head.l2cache.get.spp_send_node, core_with_l2.last.l2cache.get.spp_send_node) match{
+  //   case(Some(l2_0),Some(l2_1))=>{
+  //     val l3pf_RecvXbar = LazyModule(new coupledL2.prefetch.PrefetchReceiverXbar(NumCores))
+  //     for (i <- 0 until NumCores) {
+  //       println(s"Connecting L2 prefecher_sender_${i} to L3!")
+  //       l3pf_RecvXbar.inNode(i) := core_with_l2(i).l2cache.get.spp_send_node.get
+  //     }
+  //     l3cacheOpt.get.pf_l3recv_node.map(l3Recv => l3Recv := l3pf_RecvXbar.outNode.head)
+  //   }
+  //   case(_,_) => None
+  // }
 
+  // val core_rst_nodes = if(l3cacheOpt.nonEmpty && l3cacheOpt.get.rst_nodes.nonEmpty){
+  //   l3cacheOpt.get.rst_nodes.get
+  // } else {
+  //   core_with_l2.map(_ => BundleBridgeSource(() => Reset()))
+  // }
   val core_rst_nodes = core_with_l2.map(_ => BundleBridgeSource(() => Reset()))
 
   core_rst_nodes.zip(core_with_l2.map(_.core_reset_sink)).foreach({
