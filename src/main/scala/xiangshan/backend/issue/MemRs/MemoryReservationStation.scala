@@ -130,9 +130,9 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
   private val stdExuCfg = stdIssue.flatMap(_._2.exuConfigs).filter(_.exuType == ExuType.std).head
   private val lduExuCfg = lduIssue.flatMap(_._2.exuConfigs).filter(_.exuType == ExuType.ldu).head
 
-  private val staSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, staIssuePortNum, staExuCfg, true, Some(s"MemoryStaSelectNetwork")))
-  private val stdSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, stdIssuePortNum, stdExuCfg, true, Some(s"MemoryStdSelectNetwork")))
-  private val lduSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, lduIssuePortNum, lduExuCfg, true, Some(s"MemoryLduSelectNetwork")))
+  private val staSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, staIssuePortNum, staExuCfg, true, true, Some(s"MemoryStaSelectNetwork")))
+  private val stdSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, stdIssuePortNum, stdExuCfg, true, true, Some(s"MemoryStdSelectNetwork")))
+  private val lduSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, lduIssuePortNum, lduExuCfg, true, true, Some(s"MemoryLduSelectNetwork")))
 
   staSelectNetwork.io.selectInfo.zip(rsBankSeq).foreach({ case (sink, source) =>
     sink := source.io.staSelectInfo
@@ -183,7 +183,7 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
   }
 
 
-  private val specialIssueArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, lduIssuePortNum))
+  private val specialIssueArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, lduIssuePortNum, false))
   private val slRes = specialIssueArbiter.io.out
   rsBankSeq.zip(slRes.bits.bankIdxOH.asBools).foreach({case(b, e) =>
     b.io.specialIssue.valid := slRes.valid && e
@@ -220,7 +220,7 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
       issueDriver.io.redirect := io.redirect
       issueDriver.io.earlyWakeUpCancel := io.earlyWakeUpCancel
 
-      val respArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, 3))
+      val respArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, 3, true))
       respArbiter.io.in(0) <> stdSelectNetwork.io.issueInfo(issuePortIdx)
       respArbiter.io.in(1) <> staSelectNetwork.io.issueInfo(issuePortIdx)
       respArbiter.io.in(2).valid := lduSelectNetwork.io.issueInfo(issuePortIdx).valid

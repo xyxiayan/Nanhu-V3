@@ -41,7 +41,7 @@ class SelectResp(val bankIdxWidth:Int, entryIdxWidth:Int)(implicit p: Parameters
   val bankIdxOH = UInt(bankIdxWidth.W)
 }
 
-class SelectPolicy(width:Int, oldest:Boolean)(implicit p: Parameters) extends Module{
+class SelectPolicy(width:Int, oldest:Boolean, haveEqual:Boolean)(implicit p: Parameters) extends Module{
   val io = IO(new Bundle{
     val in = Input(Vec(width, Valid(new RobPtr)))
     val out = Output(Valid(UInt(width.W)))
@@ -50,10 +50,10 @@ class SelectPolicy(width:Int, oldest:Boolean)(implicit p: Parameters) extends Mo
   if(oldest) {
     val onlyOne = PopCount(io.in.map(_.valid)) === 1.U
     val oldestOHMatrix = io.in.zipWithIndex.map({ case (self, idx) =>
-      io.in.zipWithIndex.filterNot(_._2 == idx).map(i => (i._1.valid && self.valid && (self.bits < i._1.bits)) ^ i._1.valid)
+      io.in.zipWithIndex.filterNot(_._2 == idx).map(i => (i._1.valid && self.valid && (self.bits <= i._1.bits)) ^ i._1.valid)
     })
     val oldestOHSeq = oldestOHMatrix.map(_.reduce(_|_)).map(!_)
-    val oldestOH = Cat(oldestOHSeq.reverse)
+    val oldestOH = if(haveEqual) PriorityEncoderOH(Cat(oldestOHSeq.reverse)) else Cat(oldestOHSeq.reverse)
     val defaultValue = Cat(io.in.map(_.valid).reverse)
     io.out.valid := io.in.map(_.valid).reduce(_ | _)
     io.out.bits := Mux(onlyOne, defaultValue, oldestOH)
@@ -105,7 +105,7 @@ class SelectPolicy(width:Int, oldest:Boolean)(implicit p: Parameters) extends Mo
   * }}}
 */
 
-class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, oldest:Boolean, name:Option[String] = None)(implicit p: Parameters) extends XSModule {
+class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, oldest:Boolean, haveEqual:Boolean, name:Option[String] = None)(implicit p: Parameters) extends XSModule {
   require(issueNum <= bankNum && 0 < issueNum && bankNum % issueNum == 0, "Illegal number of issue ports are supported now!")
   private val fuTypeList = cfg.fuConfigs.map(_.fuType)
   val io = IO(new Bundle{
@@ -119,7 +119,7 @@ class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, 
 
   private val selectResultsPerBank = io.selectInfo.zipWithIndex.map({case(si, bidx) =>
     val primaryResult = Wire(Valid(new SelectResp(bankNum, entryNum)))
-    val primarySelector = Module(new SelectPolicy(entryNum,oldest))
+    val primarySelector = Module(new SelectPolicy(entryNum, oldest, haveEqual))
     primarySelector.io.in.zip(si).foreach({case(a, b) =>
       a.valid := b.valid && cfg.fuConfigs.map(_.fuType === b.bits.fuType).reduce(_|_)
       a.bits := b.bits.robPtr
@@ -138,7 +138,7 @@ class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, 
     val bankNumPerIss = bankNum / issueNum
     finalSelectResult.zipWithIndex.foreach({case(res, i) =>
       val selBanks = selectResultsPerBank.slice(i * bankNumPerIss, i * bankNumPerIss + bankNumPerIss)
-      val secondarySelector = Module(new SelectPolicy(bankNumPerIss, oldest))
+      val secondarySelector = Module(new SelectPolicy(bankNumPerIss, oldest, haveEqual))
       secondarySelector.io.in.zip(selBanks).foreach({ case (a, b) =>
         a.valid := b.valid
         a.bits := b.bits.info.robPtr
