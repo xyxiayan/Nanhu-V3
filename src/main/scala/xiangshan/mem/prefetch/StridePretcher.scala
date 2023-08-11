@@ -136,7 +136,7 @@ class PrefetchFilterTable(val parentName:String = "Unknown")(implicit p: Paramet
     new SRAMTemplate(fTableEntry(), set = pfTableEntries, way = 1, bypassWrite = true, shouldReset = true,
       hasMbist = coreParams.hasMbist,
       hasShareBus = coreParams.hasShareBus,
-      parentName = s"${parentName}_fTable"
+      parentName = s"${parentName}_fTable_"
     )
   )
   val valid_tag = RegInit(VecInit(Seq.fill(pfTableEntries)(false.B)))
@@ -207,7 +207,7 @@ class StridePrefetcher(val parentName:String = "Unknown")(implicit p: Parameters
   require(exuParameters.LduCnt == 2)
 
   val tfTable = Module(new TrainFilterTable())
-  val pfTable = Module(new PrefetchFilterTable())
+  val pfTable = Module(new PrefetchFilterTable(parentName + "_pfTable_"))
 
   io.tlb_req <> DontCare
   val ld_curr = io.ld_in.map(_.bits)
@@ -256,7 +256,7 @@ class StridePrefetcher(val parentName:String = "Unknown")(implicit p: Parameters
     new SRAMTemplate(sTableEntry(), set = sTableEntries, way = 1, bypassWrite = true, shouldReset = true,
       hasMbist = coreParams.hasMbist,
       hasShareBus = coreParams.hasShareBus,
-      parentName = s"${parentName}_sTable"
+      parentName = s"${parentName}_sTable_"
     )
   )
   val train_ld_pc_s0 = train_ld.uop.cf.pc
