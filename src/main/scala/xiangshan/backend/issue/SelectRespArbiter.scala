@@ -22,14 +22,14 @@ import chipsalliance.rocketchip.config.Parameters
 import chisel3._
 import chisel3.util._
 
-class SelectRespArbiter(bankNum:Int, entryNum:Int, inNum:Int)(implicit p: Parameters) extends Module{
+class SelectRespArbiter(bankNum:Int, entryNum:Int, inNum:Int, haveEqual:Boolean)(implicit p: Parameters) extends Module{
   val io = IO(new Bundle{
     val in = Vec(inNum, Flipped(Decoupled(new SelectResp(bankNum, entryNum))))
     val out = Decoupled(new SelectResp(bankNum, entryNum))
     val chosen = Output(UInt(inNum.W))
   })
 
-  private val selector = Module(new SelectPolicy(inNum, true))
+  private val selector = Module(new SelectPolicy(inNum, true, haveEqual))
   selector.io.in.zip(io.in).foreach({case(si, in) =>
     si.valid := in.valid
     si.bits := in.bits.info.robPtr
