@@ -11,6 +11,7 @@ class PrefetcherIO()(implicit p: Parameters) extends XSBundle {
   val ld_in = Flipped(Vec(exuParameters.LduCnt, ValidIO(new LsPipelineBundle())))
   val tlb_req = new TlbRequestIO(nRespDups = 2)
   val pf_addr = ValidIO(UInt(PAddrBits.W))
+  val l1_pf_req = coreParams.l1dprefetchRefill.map(_ =>ValidIO(new L1PrefetchReq()))
   val enable = Input(Bool())
 }
 

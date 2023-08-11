@@ -138,26 +138,18 @@ class XSTile(val parentName:String = "Unknown")(implicit p: Parameters) extends 
   l2cache match {
     case Some(l2) =>
       misc.l2_binder.get :*= l2.node :*= TLBuffer() :*= TLBuffer() :*= misc.l1_xbar
-      l2.pf_recv_node match{
-        case Some(l2_recv_node) =>
-        println("Connecting L1 prefetcher to L2!")
-        l2_recv_node := core.exuBlock.memoryBlock.pf_sender_opt.get
-        case None =>
+      // l2.pf_recv_node.map(recv => {
+      //   println("Connecting L1 prefetcher to L2!")
+      //   recv := core.exuBlock.memoryBlock.pf_sender_opt.get
+      //   // recv := None
+      // })
+      l2.pf_recv_node.map {l2_node =>
+          println("Connecting L1 prefetcher to L2!")
+          core.exuBlock.memoryBlock.pf_sender_opt.map(sender => l2_node := sender)
       }
     case None =>
   }
 
-  // l2cache match {
-  //   case Some(l2) =>
-  //     misc.l2_binder.get :*= l2.node :*= misc.l1_xbar
-  //     l2.pf_recv_node.map(recv => {
-  //       println("Connecting L1 prefetcher to L2!")
-  //       recv := core.memBlock.pf_sender_opt.get
-  //     })
-  //   case None =>
-  //     val dummyMatch = WireDefault(false.B)
-  //     ExcitingUtils.addSource(dummyMatch, s"L2MissMatch_${p(XSCoreParamsKey).HartId}", ExcitingUtils.Perf, true)
-  // }
   misc.i_mmio_port := core.frontend.instrUncache.clientNode
   misc.d_mmio_port := core.exuBlock.memoryBlock.uncache.clientNode
 
