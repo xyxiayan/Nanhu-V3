@@ -145,10 +145,10 @@ class IntegerReservationStationImpl(outer:IntegerReservationStation, param:RsPar
   private val divExuCfg = divIssue.flatMap(_._2.exuConfigs).filter(_.exuType == ExuType.div).head
   private val jmpExuCfg = jmpIssue.flatMap(_._2.exuConfigs).filter(_.exuType == ExuType.jmp).head
 
-  private val aluSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, aluIssuePortNum, aluExuCfg, true, false, Some(s"IntegerAluSelectNetwork")))
+  private val aluSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, aluIssuePortNum, aluExuCfg, false, false, Some(s"IntegerAluSelectNetwork")))
   private val mulSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, mulIssuePortNum, mulExuCfg, false, false, Some(s"IntegerMulSelectNetwork")))
   private val divSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, divIssuePortNum, divExuCfg, false, false, Some(s"IntegerDivSelectNetwork")))
-  private val jmpSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, jmpIssuePortNum, jmpExuCfg, true, false, Some(s"IntegerJmpSelectNetwork")))
+  private val jmpSelectNetwork = Module(new SelectNetwork(param.bankNum, entriesNumPerBank, jmpIssuePortNum, jmpExuCfg, false, false, Some(s"IntegerJmpSelectNetwork")))
   divSelectNetwork.io.tokenRelease.get.zip(wakeup.filter(_._2.exuType == ExuType.div).map(_._1)).foreach({
     case(sink, source) =>
       sink.valid := source.valid && source.bits.uop.ctrl.rfWen
