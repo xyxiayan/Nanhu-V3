@@ -46,7 +46,9 @@ class SelectPolicy(width:Int, oldest:Boolean, haveEqual:Boolean)(implicit p: Par
     val in = Input(Vec(width, Valid(new RobPtr)))
     val out = Output(Valid(UInt(width.W)))
   })
-  override val desiredName:String = s"SelectPolicy_w${width}_" + (if(oldest)"o" else "p")
+  private val ostr = if(oldest)"o" else "p"
+  private val esrt = if(haveEqual) "e" else ""
+  override val desiredName:String = s"SelectPolicy_w${width}" + ostr + esrt
   if(oldest) {
     val onlyOne = PopCount(io.in.map(_.valid)) === 1.U
     val oldestOHMatrix = io.in.zipWithIndex.map({ case (self, idx) =>
@@ -63,6 +65,19 @@ class SelectPolicy(width:Int, oldest:Boolean, haveEqual:Boolean)(implicit p: Par
   }
   when(io.out.valid) {
     assert(PopCount(io.out.bits) === 1.U)
+  }
+}
+object SelectPolicy {
+  def apply(in:Seq[Valid[SelectResp]], oldest:Boolean, haveEqual:Boolean, bankNum:Int, entryNum:Int, p:Parameters) :Valid[SelectResp] = {
+    val selector = Module(new SelectPolicy(in.length, oldest, haveEqual)(p))
+    selector.io.in.zip(in).foreach({case(a, b) =>
+      a.valid := b.valid
+      a.bits := b.bits.info.robPtr
+    })
+    val res = Wire(Valid(new SelectResp(bankNum, entryNum)(p)))
+    res.valid := selector.io.out.valid
+    res.bits := Mux1H(selector.io.out.bits, in.map(_.bits))
+    res
   }
 }
 /** {{{
@@ -117,36 +132,23 @@ class SelectNetwork(bankNum:Int, entryNum:Int, issueNum:Int, val cfg:ExuConfig, 
   })
   override val desiredName:String = name.getOrElse("SelectNetwork")
 
-  private val selectResultsPerBank = io.selectInfo.zipWithIndex.map({case(si, bidx) =>
-    val primaryResult = Wire(Valid(new SelectResp(bankNum, entryNum)))
-    val primarySelector = Module(new SelectPolicy(entryNum, oldest, haveEqual))
-    primarySelector.io.in.zip(si).foreach({case(a, b) =>
-      a.valid := b.valid && cfg.fuConfigs.map(_.fuType === b.bits.fuType).reduce(_|_)
-      a.bits := b.bits.robPtr
+  private val selectInputPerBank = io.selectInfo.zipWithIndex.map({case(si, bidx) =>
+    si.zipWithIndex.map({ case (in, eidx) =>
+      val selInfo = Wire(Valid(new SelectResp(bankNum, entryNum)))
+      selInfo.valid := in.valid && cfg.fuConfigs.map(_.fuType === in.bits.fuType).reduce(_ | _)
+      selInfo.bits.info := in.bits
+      selInfo.bits.bankIdxOH := (1 << bidx).U(bankNum.W)
+      selInfo.bits.entryIdxOH := (1 << eidx).U(entryNum.W)
+      selInfo
     })
-    primaryResult.valid := primarySelector.io.out.valid
-    primaryResult.bits.info := Mux1H(primarySelector.io.out.bits, si.map(_.bits))
-    primaryResult.bits.entryIdxOH := primarySelector.io.out.bits
-    primaryResult.bits.bankIdxOH := (1 << bidx).U(bankNum.W)
-    primaryResult
   })
 
   private val finalSelectResult = Wire(Vec(issueNum, Valid(new SelectResp(bankNum, entryNum))))
-  if(bankNum == issueNum){
-    finalSelectResult.zip(selectResultsPerBank).foreach({case(a, b) => a := b})
-  } else {
-    val bankNumPerIss = bankNum / issueNum
-    finalSelectResult.zipWithIndex.foreach({case(res, i) =>
-      val selBanks = selectResultsPerBank.slice(i * bankNumPerIss, i * bankNumPerIss + bankNumPerIss)
-      val secondarySelector = Module(new SelectPolicy(bankNumPerIss, oldest, haveEqual))
-      secondarySelector.io.in.zip(selBanks).foreach({ case (a, b) =>
-        a.valid := b.valid
-        a.bits := b.bits.info.robPtr
-      })
-      res.valid := secondarySelector.io.out.valid
-      res.bits := Mux1H(secondarySelector.io.out.bits, selBanks.map(_.bits))
-    })
-  }
+  private val bankNumPerIss = bankNum / issueNum
+  finalSelectResult.zipWithIndex.foreach({case(res, i) =>
+    val selBanks = selectInputPerBank.slice(i * bankNumPerIss, i * bankNumPerIss + bankNumPerIss).reduce(_ ++ _)
+    res := SelectPolicy(selBanks, oldest, haveEqual, bankNum, entryNum, p)
+  })
 
   if(cfg.needToken){
     val tokenAllocators = Seq.fill(issueNum)(Module(new TokenAllocator(PhyRegIdxWidth, cfg.fuConfigs.length)))
