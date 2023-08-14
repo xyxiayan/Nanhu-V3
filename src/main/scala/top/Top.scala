@@ -86,7 +86,7 @@ class XSTop()(implicit p: Parameters) extends BaseXSSoc() with HasSoCParameter
     misc.peripheral_ports(i) := core_with_l2(i).uncache
     misc.core_to_l3_ports(i) :=* core_with_l2(i).memory_port
   }
-    
+
   // (core_with_l2.head.l2cache.get.spp_send_node, core_with_l2.last.l2cache.get.spp_send_node) match{
   //   case(Some(l2_0),Some(l2_1))=>{
   //     val l3pf_RecvXbar = LazyModule(new coupledL2.prefetch.PrefetchReceiverXbar(NumCores))

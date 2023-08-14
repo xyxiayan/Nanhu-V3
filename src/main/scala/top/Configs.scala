@@ -34,7 +34,7 @@ import device.{EnableJtag, XSDebugModuleParams}
 import huancun._
 import coupledL2._
 import coupledL3._
-import xiangshan.mem.prefetch.{SMSParams,StridePrefetcherParams}
+import xiangshan.mem.prefetch.SMSParams
 
 class BaseConfig(n: Int) extends Config((site, here, up) => {
   case XLen => 64
@@ -43,10 +43,8 @@ class BaseConfig(n: Int) extends Config((site, here, up) => {
   case PMParameKey => PMParameters()
   case XSTileKey => Seq.tabulate(n){
     i => XSCoreParameters(HartId = i, hasMbist = false, hasShareBus = false,
-    prefetcher = Some(SMSParams()),
-    l1dprefetcher = Some(StridePrefetcherParams()),
-    l1dprefetchRefill = Some(true)
-    )}
+    prefetcher = Some(SMSParams()))
+  }
   case ExportDebug => DebugAttachParams(protocols = Set(JTAG))
   case DebugModuleKey => Some(XSDebugModuleParams(site(XLen)))
   case JtagDTMKey => JtagDTMKey
@@ -66,7 +64,6 @@ class MinimalConfig(n: Int = 1) extends Config(
         DecodeWidth = 2,
         RenameWidth = 2,
         FetchWidth = 4,
-//        IssQueSize = 8,
         NRPhyRegs = 64,
         LoadQueueSize = 16,
         LoadQueueNWriteBanks = 4,

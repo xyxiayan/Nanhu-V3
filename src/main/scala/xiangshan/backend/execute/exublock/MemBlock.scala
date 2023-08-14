@@ -34,8 +34,7 @@ import xiangshan.backend.rob.RobLsqIO
 import xiangshan.cache._
 import xiangshan.cache.mmu.{BTlbPtwIO, TLB, TlbIO, TlbReplace}
 import xiangshan.mem._
-import xiangshan.mem.prefetch.{BasePrefecher, L1PrefetchReq, SMSParams, SMSPrefetcher,L1PrefetchFuzzer}
-import xiangshan.mem.prefetch.{StridePrefetcherParams,StridePrefetcher}
+import xiangshan.mem.prefetch.{BasePrefecher, SMSParams, SMSPrefetcher}
 import xs.utils.mbist.MBISTPipeline
 import xs.utils.{DelayN, ParallelPriorityMux, RegNextN, ValidIODelay}
 
@@ -262,26 +261,6 @@ class MemBlockImp(outer: MemBlock) extends BasicExuBlockImp(outer)
       }
     case None =>
   }
-  println("MEMBLOCK DEBUG")
-  println(coreParams.prefetcher)
-  println(prefetcherOpt)
-  val l1dprefetcherOpt: Option[BasePrefecher] = coreParams.l1dprefetcher.get match{
-    case pf:StridePrefetcherParams =>
-      val stride = Module(new StridePrefetcher(outer.parentName + "_l1dstride"))
-      stride.io.enable := RegNextN(io.csrCtrl.l1D_pf_enable_stride, 2, Some(true.B))
-
-      //l1 dcache prefetch refill
-      if(coreParams.l1dprefetchRefill.get.equals(true)){
-        val pf_to_l1d = Pipe(stride.io.l1_pf_req.get, 1)
-        loadUnits.foreach(load_unit => {
-          load_unit.io.prefetch_req.valid := pf_to_l1d.valid
-          load_unit.io.prefetch_req.bits := pf_to_l1d.bits
-        })
-      }
-      Some(stride)
-    case _ => None
-  }
-
   private val pf_train_on_hit = RegNextN(io.csrCtrl.l1D_pf_train_on_hit, 2, Some(true.B))
 
   loadUnits.zipWithIndex.map(x => x._1.suggestName("LoadUnit_"+x._2))
@@ -504,19 +483,6 @@ class MemBlockImp(outer: MemBlock) extends BasicExuBlockImp(outer)
         pcDelay1Bits,
         pcDelay2Bits)
     })
-    l1dprefetcherOpt.foreach(pf => {
-      pf.io.ld_in(i).valid := Mux(pf_train_on_hit,
-        loadUnits(i).io.prefetch_train.valid,
-        loadUnits(i).io.prefetch_train.valid && loadUnits(i).io.prefetch_train.bits.miss
-      )
-      pf.io.ld_in(i).bits := loadUnits(i).io.prefetch_train.bits
-      pf.io.ld_in(i).bits.uop.cf.pc := Mux(loadUnits(i).io.s2IsPointerChasing,
-        pcDelay1Bits,
-        pcDelay2Bits)
-    })
-
-//    loadUnits(i).io.prefetch_req.valid := false.B
-//    loadUnits(i).io.prefetch_req.bits := 0.U.asTypeOf(new L1PrefetchReq())
 
     // load to load fast forward: load(i) prefers data(i)
     val fastPriority = (i until exuParameters.LduCnt) ++ (0 until i)
@@ -580,28 +546,8 @@ class MemBlockImp(outer: MemBlock) extends BasicExuBlockImp(outer)
     XSDebug(lduWritebacks(i).bits.uop.cf.trigger.getBackendCanFire && lduWritebacks(i).valid, p"Debug Mode: Load Inst No.${i}" +
     p"has trigger fire vec ${lduWritebacks(i).bits.uop.cf.trigger.backendCanFire}\n")
   }
-  // l1 pf fuzzer interface
-  val DebugEnableL1PFFuzzer = false
-  if (DebugEnableL1PFFuzzer) {
-    // l1 pf req fuzzer
-    val fuzzer = Module(new L1PrefetchFuzzer())
-    fuzzer.io.vaddr := DontCare
-    fuzzer.io.paddr := DontCare
-    dontTouch(fuzzer.io)
-    // override load_unit prefetch_req
-    loadUnits.foreach(load_unit => {
-      load_unit.io.prefetch_req.valid := fuzzer.io.req.valid
-      load_unit.io.prefetch_req.bits := fuzzer.io.req.bits
-      // load_unit.io.prefetch_req.bits.paddr := 0x080000000L.U(PAddrBits.W)
-    })
-
-    fuzzer.io.req.ready := true.B
-  }
   // Prefetcher
   prefetcherOpt.foreach(pf => {
-    dtlb_reqs(ld_tlb_ports - 1) <> pf.io.tlb_req
-  })
-  l1dprefetcherOpt.foreach(pf => {
     dtlb_reqs(ld_tlb_ports - 1) <> pf.io.tlb_req
   })
 
