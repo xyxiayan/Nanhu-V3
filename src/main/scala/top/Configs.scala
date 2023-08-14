@@ -279,7 +279,7 @@ class WithNKBL2
     ))
 })
 
-class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1, core_num: Int) extends Config((site, here, up) => {
+class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1, core_num: Int = 1) extends Config((site, here, up) => {
   case SoCParamsKey =>
     val sets = n * 1024 / banks / ways / 64
     val tiles = site(XSTileKey)
