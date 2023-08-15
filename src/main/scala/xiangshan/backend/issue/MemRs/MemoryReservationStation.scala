@@ -184,7 +184,9 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
 
 
   private val specialIssueArbiter = Module(new SelectRespArbiter(param.bankNum, entriesNumPerBank, lduIssuePortNum, false))
+  private val loadUops = Wire(Vec(lduIssuePortNum, new MicroOp))
   private val slRes = specialIssueArbiter.io.out
+  private val uopChosen = Mux1H(specialIssueArbiter.io.chosen, loadUops)
   rsBankSeq.zip(slRes.bits.bankIdxOH.asBools).foreach({case(b, e) =>
     b.io.specialIssue.valid := slRes.valid && e
     b.io.specialIssue.bits := slRes.bits.entryIdxOH
@@ -196,7 +198,7 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
   slRes.ready := specialLoadIssueDriver.io.enq.ready
   specialLoadIssueDriver.io.enq.bits.entryIdxOH := slRes.bits.entryIdxOH
   specialLoadIssueDriver.io.enq.bits.bankIdxOH := slRes.bits.bankIdxOH
-  specialLoadIssueDriver.io.enq.bits.uop := Mux1H(slRes.bits.bankIdxOH, rsBankSeq.map(_.io.specialIssueUop))
+  specialLoadIssueDriver.io.enq.bits.uop := uopChosen
   specialLoadIssueDriver.io.enq.bits.uop.robIdx := slRes.bits.info.robPtr
   specialLoadIssueDriver.io.enq.bits.uop.ctrl.rfWen := slRes.bits.info.rfWen
   specialLoadIssueDriver.io.enq.bits.uop.ctrl.fpWen := slRes.bits.info.fpWen
@@ -230,15 +232,29 @@ class MemoryReservationStationImpl(outer:MemoryReservationStation, param:RsParam
       lduSelectNetwork.io.issueInfo(issuePortIdx).ready := specialIssueArbiter.io.in(issuePortIdx).ready | respArbiter.io.in(2).ready
       val selResp = respArbiter.io.out
       val isStd =  respArbiter.io.chosen === 1.U
-      val selectedBanks = rsBankSeq.slice(issuePortIdx * issBankNum, issuePortIdx * issBankNum + issBankNum)
-      val bankEns = selResp.bits.bankIdxOH.asBools.slice(issuePortIdx * issBankNum, issuePortIdx * issBankNum + issBankNum).map(_ && selResp.fire)
-      val bankPayloadData = selectedBanks.map(_.io.issueUop)
-      for ((b, en) <- selectedBanks.zip(bankEns)) {
-        b.io.issue.valid := en
-        b.io.issue.bits := selResp.bits.entryIdxOH
-        b.io.isStaLduIssue := !isStd
+
+      def getSlice[T <: Object](in: Seq[T]): Seq[T] = in.slice(issuePortIdx * issBankNum, issuePortIdx * issBankNum + issBankNum)
+
+      val selectedBanks = getSlice(rsBankSeq)
+      val bankEns = getSlice(selResp.bits.bankIdxOH.asBools).map(_ && selResp.fire)
+      val bankPayloads = Wire(Vec(3, new MicroOp))
+      for ((b, en)<- selectedBanks.zip(bankEns)) {
+        b.io.loadIssue.valid := en && respArbiter.io.in(2).fire
+        b.io.loadIssue.bits := lduSelectNetwork.io.issueInfo(issuePortIdx).bits.entryIdxOH
+        b.io.staIssue.valid := en && respArbiter.io.in(1).fire
+        b.io.staIssue.bits := staSelectNetwork.io.issueInfo(issuePortIdx).bits.entryIdxOH
+        b.io.stdIssue.valid := en && respArbiter.io.in(0).fire
+        b.io.stdIssue.bits := stdSelectNetwork.io.issueInfo(issuePortIdx).bits.entryIdxOH
       }
-      val selPayload = Mux1H(bankEns, bankPayloadData)
+      val stdSel = getSlice(stdSelectNetwork.io.issueInfo(issuePortIdx).bits.bankIdxOH.asBools)
+      val staSel = getSlice(staSelectNetwork.io.issueInfo(issuePortIdx).bits.bankIdxOH.asBools)
+      val loadSel = getSlice(lduSelectNetwork.io.issueInfo(issuePortIdx).bits.bankIdxOH.asBools)
+      bankPayloads(0) := Mux1H(stdSel, selectedBanks.map(_.io.stdUop))
+      bankPayloads(1) := Mux1H(staSel, selectedBanks.map(_.io.staUop))
+      bankPayloads(2) := Mux1H(loadSel, selectedBanks.map(_.io.loadUop))
+      loadUops(issuePortIdx) := bankPayloads(2)
+
+      val selPayload = Mux1H(respArbiter.io.chosen, bankPayloads)
       stIssuedWires(issuePortIdx).valid := issueDriver.io.deq.fire && issueDriver.io.deq.bits.uop.ctrl.fuType === FuType.stu
       stIssuedWires(issuePortIdx).bits := issueDriver.io.deq.bits.uop.robIdx
       val replayPortSel = selectedBanks.map(_.io.replay)
