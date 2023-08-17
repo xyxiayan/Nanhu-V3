@@ -512,7 +512,7 @@ class DCacheImp(outer: DCache) extends LazyModuleImp(outer) with HasDCacheParame
   val wb         = Module(new WritebackQueue(edge))
 
   //load req s0
-  require(io.lsu.load.length == 2)
+//  require(io.lsu.load.length == 2)
   val ldAllValid = io.lsu.load(0).req.valid && io.lsu.load(1).req.valid
   val ldRob = io.lsu.load.map(_.req.bits.robIdx)
   val ldSelRead = Mux(ldAllValid,Mux(ldRob(0) < ldRob(1),0.U,1.U),0.U)
