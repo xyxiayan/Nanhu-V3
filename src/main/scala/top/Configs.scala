@@ -320,7 +320,7 @@ class WithNKBL3(n: Int, ways: Int = 8, inclusive: Boolean = true, banks: Int = 1
           val l2params = core.L2CacheParamsOpt.get.toCacheParams
           l2params.copy(
             sets = sets,
-            ways = 4 * core_num,
+            ways = 2 * core_num,
             blockGranularity = log2Ceil(clientDirBytes / core.L2NBanks / l2params.ways / 64 / tiles.size)
           )
         },
@@ -350,7 +350,7 @@ class MediumConfig(n: Int = 1) extends Config(
 
 class DefaultConfig(n: Int = 1) extends Config(
   new WithNKBL3(4 * 1024, inclusive = false, banks = 4, ways = 16, core_num = n)
-    ++ new WithNKBL2(256, inclusive = false, banks = 2, alwaysReleaseData = true)
+    ++ new WithNKBL2(256, inclusive = false, banks = 2, ways = 4, alwaysReleaseData = true)
     ++ new WithNKBL1D(64)
     ++ new BaseConfig(n)
 )
