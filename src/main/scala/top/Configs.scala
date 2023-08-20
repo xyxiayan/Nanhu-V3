@@ -245,8 +245,8 @@ class WithNKBL2
         // )),
         clientCaches = Seq(L1Param(
           "dcache",
-          sets = 2 * p.dcacheParametersOpt.get.nSets / banks,
-          ways = p.dcacheParametersOpt.get.nWays + 2,
+          sets = p.dcacheParametersOpt.get.nSets / banks,
+          ways = p.dcacheParametersOpt.get.nWays,
           aliasBitsOpt = p.dcacheParametersOpt.get.aliasBitsOpt
         )),
         reqField = Seq(utility.ReqSourceField()),
