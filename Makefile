@@ -67,7 +67,7 @@ override SIM_ARGS += --enable-topdown
 endif
 
 # emu for the release version
-RELEASE_ARGS = --disable-all --fpga-platform --enable-difftest
+RELEASE_ARGS = --fpga-platform --enable-difftest
 DEBUG_ARGS   = --enable-difftest
 
 ifeq ($(VCS),1)
