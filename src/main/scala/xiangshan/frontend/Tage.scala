@@ -861,24 +861,24 @@ class Tage(val parentName:String = "Unknown")(implicit p: Parameters) extends Ba
 
   for (w <- 0 until TageBanks) {
     for (i <- 0 until TageNTables) {
-      tables(i).io.update.mask(w)    := RegNext(updateMask(w)(i), false.B)
-      tables(i).io.update.takens(w)  := RegEnable(updateTakens(w)(i), updateMask(w)(i))
-      tables(i).io.update.alloc(w)   := RegEnable(updateAlloc(w)(i), updateMask(w)(i))
-      tables(i).io.update.oldCtrs(w) := RegEnable(updateOldCtrs(w)(i), updateMask(w)(i))
+      tables(i).io.update.mask(w)    := RegNext(updateMask(w)(i))
+      tables(i).io.update.takens(w)  := RegNext(updateTakens(w)(i))
+      tables(i).io.update.alloc(w)   := RegNext(updateAlloc(w)(i))
+      tables(i).io.update.oldCtrs(w) := RegNext(updateOldCtrs(w)(i))
 
-      tables(i).io.update.uMask(w)   := RegEnable(updateUMask(w)(i), updateMask(w)(i))
-      tables(i).io.update.us(w)      := RegEnable(updateU(w)(i), updateMask(w)(i))
-      tables(i).io.update.reset_u(w) := RegEnable(updateResetU(w), updateMask(w)(i))
+      tables(i).io.update.uMask(w)   := RegNext(updateUMask(w)(i))
+      tables(i).io.update.us(w)      := RegNext(updateU(w)(i))
+      tables(i).io.update.reset_u(w) := RegNext(updateResetU(w))
       // use fetch pc instead of instruction pc
-      tables(i).io.update.pc       := RegEnable(update.pc, updateMask(w)(i))
-      tables(i).io.update.folded_hist := RegEnable(updateFHist, updateMask(w)(i))
-      tables(i).io.update.ghist := RegEnable(io.update(dupForTageSC).bits.ghist, updateMask(w)(i))
+      tables(i).io.update.pc       := RegNext(update.pc)
+      tables(i).io.update.folded_hist := RegNext(updateFHist)
+      tables(i).io.update.ghist := RegNext(io.update(dupForTageSC).bits.ghist)
     }
   }
-  bt.io.update_mask := RegEnable(baseupdate, updateValids(0))
-  bt.io.update_cnt := RegEnable(updatebcnt, updateValids(0))
-  bt.io.update_pc := RegEnable(update.pc, updateValids(0))
-  bt.io.update_takens := RegEnable(bUpdateTakens, updateValids(0))
+  bt.io.update_mask := RegNext(baseupdate)
+  bt.io.update_cnt := RegNext(updatebcnt)
+  bt.io.update_pc := RegNext(update.pc)
+  bt.io.update_takens := RegNext(bUpdateTakens)
 
   // all should be ready for req
   io.s1_ready := tables.map(_.io.req.ready).reduce(_&&_)
