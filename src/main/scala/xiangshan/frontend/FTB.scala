@@ -491,8 +491,9 @@ class FTB(parentName:String = "Unknown")(implicit p: Parameters) extends BasePre
   val update_uftb_hit_ftb_miss = u_meta.fauFtbHit.getOrElse(false.B) && !u_meta.hit
   val u_valid = u.valid && !u.bits.old_entry && !(update_uftb_hit_ftb_miss)
 
-  val delay2_pc = DelayN(update.pc, 2)
-  val delay2_entry = DelayN(update.ftb_entry, 2)
+  val updateDelay2 = Pipe(u, 2)
+  val delay2_pc = updateDelay2.bits.pc
+  val delay2_entry = updateDelay2.bits.ftb_entry
 
   
   val update_now = u_valid && u_meta.hit

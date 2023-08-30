@@ -255,7 +255,7 @@ trait HasSC extends HasSCParameter with HasPerfEvents { this: Tage =>
         val t = Module(new SCTable(nRows/TageBanks, ctrBits, histLen, parentName = this.parentName + s"scTable${idx}_"))
         val req = t.io.req
         req.valid := io.s0_fire(dupForTageSC)
-        req.bits.pc := s0_pc_dup(dupForTageSC)
+        req.bits.pc := s0_pc_dup(4)
         req.bits.folded_hist := io.in.bits.folded_hist(dupForTageSC)
         req.bits.ghist := DontCare
         if (!EnableSC) {t.io.update := DontCare}
@@ -421,12 +421,12 @@ trait HasSC extends HasSCParameter with HasPerfEvents { this: Tage =>
 
     for (b <- 0 until TageBanks) {
       for (i <- 0 until SCNTables) {
-        scTables(i).io.update.mask(b) := RegNext(scUpdateMask(b)(i))
-        scTables(i).io.update.tagePreds(b) := RegNext(scUpdateTagePreds(b))
-        scTables(i).io.update.takens(b)    := RegNext(scUpdateTakens(b))
-        scTables(i).io.update.oldCtrs(b)   := RegNext(scUpdateOldCtrs(b)(i))
-        scTables(i).io.update.pc := RegNext(update.pc)
-        scTables(i).io.update.folded_hist := RegNext(updateFHist)
+        scTables(i).io.update.mask(b) := RegNext(scUpdateMask(b)(i), false.B)
+        scTables(i).io.update.tagePreds(b) := RegEnable(scUpdateTagePreds(b), scUpdateMask(b)(i))
+        scTables(i).io.update.takens(b)    := RegEnable(scUpdateTakens(b), scUpdateMask(b)(i))
+        scTables(i).io.update.oldCtrs(b)   := RegEnable(scUpdateOldCtrs(b)(i), scUpdateMask(b)(i))
+        scTables(i).io.update.pc := RegEnable(update.pc, scUpdateMask(b)(i))
+        scTables(i).io.update.folded_hist := RegEnable(updateFHist, scUpdateMask(b)(i))
       }
     }
 
