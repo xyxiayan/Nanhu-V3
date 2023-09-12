@@ -127,7 +127,7 @@ abstract class ICacheArray(implicit p: Parameters) extends XSModule
   with HasICacheParameters
 
 class ICacheMetadata(implicit p: Parameters) extends ICacheBundle {
-  val tag = UInt(tagBits.W)
+    val tag = UInt(tagBits.W)
 }
 
 object ICacheMetadata {
@@ -144,14 +144,14 @@ class ICacheMetaArray(parentName:String = "Unknown")(implicit p: Parameters) ext
 
   val metaBits = onReset.getWidth
   val metaEntryBits = cacheParams.tagCode.width(metaBits)
-  val io = IO {
+val io = IO {
     new Bundle {
-      val fencei = Flipped(new FenceIBundle)
-      val write = Flipped(DecoupledIO(new ICacheMetaWriteBundle))
-      val read = Flipped(DecoupledIO(new ICacheReadBundle))
-      val readResp = Output(new ICacheMetaRespBundle)
-      val cacheOp = Flipped(new L1CacheInnerOpIO) // customized cache op port
-    }
+    val fencei = Flipped(new FenceIBundle)
+    val write = Flipped(DecoupledIO(new ICacheMetaWriteBundle))
+    val read = Flipped(DecoupledIO(new ICacheReadBundle))
+    val readResp = Output(new ICacheMetaRespBundle)
+    val cacheOp = Flipped(new L1CacheInnerOpIO) // customized cache op port 
+  }
   }
 
   io.read.ready := !io.write.valid
@@ -261,22 +261,22 @@ class ICacheMetaArray(parentName:String = "Unknown")(implicit p: Parameters) ext
   val validPtr = Cat(io.write.bits.virIdx, wayNum)
 
   io.readResp.metaData <> DontCare
-  io.readResp.v <> DontCare
+io.readResp.v <> DontCare
   val vSetIdx_reg =   RegEnable(io.read.bits.vSetIdx,io.read.valid)
   when(port_0_read_0_reg){
     io.readResp.metaData(0) := read_metas(0)
-    (0 until nWays).map{i => io.readResp.v(0)(i) := v(0)(vSetIdx_reg(0)(highestIdxBit,1))(i)}
+(0 until nWays).map{i => io.readResp.v(0)(i) := v(0)(vSetIdx_reg(0)(highestIdxBit,1))(i)}
   }.elsewhen(port_0_read_1_reg){
     io.readResp.metaData(0) := read_metas(1)
-    (0 until nWays).map{i => io.readResp.v(0)(i) := v(1)(vSetIdx_reg(0)(highestIdxBit,1))(i)}
+(0 until nWays).map{i => io.readResp.v(0)(i) := v(1)(vSetIdx_reg(0)(highestIdxBit,1))(i)}
   }
 
   when(port_1_read_0_reg){
     io.readResp.metaData(1) := read_metas(0)
-    (0 until nWays).map{i => io.readResp.v(1)(i) := v(0)(vSetIdx_reg(1)(highestIdxBit,1))(i)}
+(0 until nWays).map{i => io.readResp.v(1)(i) := v(0)(vSetIdx_reg(1)(highestIdxBit,1))(i)}
   }.elsewhen(port_1_read_1_reg){
     io.readResp.metaData(1) := read_metas(1)
-    (0 until nWays).map{i => io.readResp.v(1)(i) := v(1)(vSetIdx_reg(1)(highestIdxBit,1))(i)}
+(0 until nWays).map{i => io.readResp.v(1)(i) := v(1)(vSetIdx_reg(1)(highestIdxBit,1))(i)}
   }
 
 
@@ -506,7 +506,7 @@ class ICache(val parentName:String = "Unknown")(implicit p: Parameters) extends 
     Seq(TLMasterParameters.v1(
       name = "icache",
       sourceId = IdRange(0, cacheParams.nMissEntries + cacheParams.nReleaseEntries + cacheParams.nPrefetchEntries),
-     // supportsProbe = TransferSizes(blockBytes),
+      // supportsProbe = TransferSizes(blockBytes),
      // supportsHint = TransferSizes(blockBytes)
     )),
     requestFields = cacheParams.reqFields,
@@ -535,7 +535,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   val dataArray      = Module(new ICacheDataArray(parentName = s"${outer.parentName}dataArray_"))
   val mainPipe       = Module(new ICacheMainPipe)
   val missUnit      = Module(new ICacheMissUnit(edge))
-
+  
   val prefetchPipe    = Module(new IPrefetchPipe)
   val mbistTagPipeline = if(coreParams.hasMbist && coreParams.hasShareBus) {
     Some(Module(new MBISTPipeline(3,s"${outer.parentName}_mbistPipe")))
@@ -544,20 +544,21 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   }
 
   val meta_read_arb   = Module(new Arbiter(new ICacheReadBundle,  2))
-
+  
   meta_read_arb.io.in(MainPipeKey)      <> mainPipe.io.metaArray.toIMeta
+  //prefetch port
   meta_read_arb.io.in(0)                <> prefetchPipe.io.toIMeta
   metaArray.io.read                     <> meta_read_arb.io.out
 
-
+  
   mainPipe.io.metaArray.fromIMeta       <> metaArray.io.readResp
   prefetchPipe.io.fromIMeta             <> metaArray.io.readResp
 
-  for(i <- 0 until partWayNum) {
+    for(i <- 0 until partWayNum) {
     dataArray.io.read.bits(i) <> mainPipe.io.dataArray.toIData.bits(i)
   }
 
-
+  
   dataArray.io.read.valid := Cat(mainPipe.io.dataArray.toIData.bits(0).readValid,mainPipe.io.dataArray.toIData.bits(1).readValid)
   mainPipe.io.dataArray.toIData.ready := dataArray.io.read.ready
 
@@ -574,7 +575,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
 
 
   mainPipe.io.csr_parity_enable := io.csr_parity_enable
-
+  
   if(cacheParams.hasPrefetch){
     prefetchPipe.io.fromFtq <> io.prefetch
     when(!io.csr_pf_enable){
@@ -584,6 +585,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   } else {
     prefetchPipe.io.fromFtq <> DontCare
   }
+  prefetchPipe.io.fencei <> io.fencei
 
   io.pmp(0) <> mainPipe.io.pmp(0)
   io.pmp(1) <> mainPipe.io.pmp(1)
@@ -613,12 +615,16 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   missUnit.io.hartId       := io.hartId
   prefetchPipe.io.fromMSHR <> missUnit.io.prefetch_check
 
-
+  
   bus.a <> missUnit.io.mem_acquire
-
+  
   // connect bus d
   missUnit.io.mem_grant.valid := false.B
   missUnit.io.mem_grant.bits  := DontCare
+
+  //Parity error port
+  val errors = mainPipe.io.errors 
+  io.error <> RegNext(Mux1H(errors.map(e => e.valid -> e)))
 
   val hasVictim = VecInit(missUnit.io.victimInfor.map(_.valid))
   val victimSetSeq = VecInit(missUnit.io.victimInfor.map(_.vidx))
@@ -631,7 +637,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
   } .elsewhen (bus.d.bits.opcode === TLMessages.ReleaseAck) {
     // releaseUnit.io.mem_grant <> bus.d
   } .otherwise {
-  //  assert (!bus.d.fire())
+    assert (!bus.d.fire())
   }
 
   val perfEvents = Seq(
@@ -658,7 +664,7 @@ class ICacheImp(outer: ICache) extends LazyModuleImp(outer) with HasICacheParame
     metaArray.io.cacheOp.resp.valid -> metaArray.io.cacheOp.resp.bits,
   ))
   cacheOpDecoder.io.error := io.error
- // assert(!((dataArray.io.cacheOp.resp.valid +& metaArray.io.cacheOp.resp.valid) > 1.U))
+  // assert(!((dataArray.io.cacheOp.resp.valid +& metaArray.io.cacheOp.resp.valid) > 1.U))
 
 }
 

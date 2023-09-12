@@ -25,6 +25,7 @@ import xiangshan.cache.mmu._
 import xiangshan.frontend._
 import xs.utils._
 import huancun.{PreferCacheKey}
+import xiangshan.backend.execute.fu.fence.{FenceIBundle, SfenceBundle}
 
 
 abstract class IPrefetchBundle(implicit p: Parameters) extends ICacheBundle
@@ -50,6 +51,7 @@ class IPredfetchIO(implicit p: Parameters) extends IPrefetchBundle {
 
   val prefetchEnable = Input(Bool())
   val prefetchDisable = Input(Bool())
+  val fencei = Flipped(new FenceIBundle)
 }
 
 class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
@@ -75,9 +77,11 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
 
   val prefetch_dir = RegInit(VecInit(Seq.fill(nPrefetchEntries)(0.U.asTypeOf(new PrefetchDir))))
 
+  val fencei = io.fencei.start
+
   val fromFtq = io.fromFtq
   val (toITLB,  fromITLB) = (io.iTLBInter.req, io.iTLBInter.resp)
-  val (toIMeta, fromIMeta) = (io.toIMeta, io.fromIMeta.metaData(0))
+  val (toIMeta, fromIMeta) = (io.toIMeta, io.fromIMeta)
   val (toPMP,  fromPMP)   = (io.pmp.req, io.pmp.resp)
   val toMissUnit = io.toMissUnit
 
@@ -107,13 +111,12 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   toITLB.bits.robIdx              := DontCare
   toITLB.bits.debug.isFirstIssue  := DontCare
 
-
   fromITLB.ready := true.B
 
   fromFtq.req.ready :=  true.B //(!enableBit || (enableBit && p3_ready)) && toIMeta.ready //&& GTimer() > 500.U
 
   /** Prefetch Stage 1: cache probe filter */
-  val p1_valid =  generatePipeControl(lastFire = p0_fire, thisFire = p1_fire || p1_discard, thisFlush = false.B, lastFlush = false.B)
+  val p1_valid =  generatePipeControl(lastFire = p0_fire, thisFire = p1_fire || p1_discard, thisFlush = fencei, lastFlush = false.B)
 
   val p1_vaddr   =  RegEnable(next = p0_vaddr,    enable=p0_fire)
 
@@ -131,11 +134,12 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
 
   val p1_ptag = get_phy_tag(tlb_resp_paddr)
 
-  val p1_meta_ptags       = ResultHoldBypass(data = VecInit(fromIMeta.map(way => way.tag)),valid = RegNext(p0_fire))
- // val p1_meta_cohs        = ResultHoldBypass(data = VecInit(fromIMeta.map(way => way.coh)),valid = RegNext(p0_fire))
+  val p1_meta_ptags       = ResultHoldBypass(data = VecInit(fromIMeta.metaData(0).map(way => way.tag)),valid = RegNext(p0_fire))
+  val p1_meta_v           = ResultHoldBypass(data = fromIMeta.v(0),valid = RegNext(p0_fire))
 
   val p1_tag_eq_vec       =  VecInit(p1_meta_ptags.map(_  ===  p1_ptag ))
-  val p1_tag_match_vec    =  VecInit(p1_tag_eq_vec.zipWithIndex.map{ case(way_tag_eq, w) => way_tag_eq })
+  val p1_tag_match_vec    =  VecInit(p1_tag_eq_vec.zipWithIndex.map{ case(way_tag_eq, w) => way_tag_eq && p1_meta_v(w)})
+  //  val p1_tag_match_vec    =  VecInit(p1_tag_eq_vec.zipWithIndex.map{ case(way_tag_eq, w) => way_tag_eq})
   val p1_tag_match        =  ParallelOR(p1_tag_match_vec)
   val (p1_hit, p1_miss)   =  (p1_valid && p1_tag_match && !p1_has_except, p1_valid && !p1_tag_match && !p1_has_except)
 
@@ -148,7 +152,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   p1_discard  :=   p1_valid && p1_req_cancle
 
   /** Prefetch Stage 2: filtered req PIQ enqueue */
-  val p2_valid =  generatePipeControl(lastFire = p1_fire, thisFire = p2_fire || p2_discard, thisFlush = false.B, lastFlush = false.B)
+  val p2_valid =  generatePipeControl(lastFire = p1_fire, thisFire = p2_fire || p2_discard, thisFlush = fencei, lastFlush = false.B)
 
   val p2_paddr     = RegEnable(next = tlb_resp_paddr,  enable = p1_fire)
   val p2_except_pf = RegEnable(next =tlb_resp_pf, enable = p1_fire)
@@ -165,7 +169,7 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   p2_discard := p2_valid && p2_exception
 
   /** Prefetch Stage 2: filtered req PIQ enqueue */
-  val p3_valid =  generatePipeControl(lastFire = p2_fire, thisFire = p3_fire || p3_discard, thisFlush = false.B, lastFlush = false.B)
+  val p3_valid =  generatePipeControl(lastFire = p2_fire, thisFire = p3_fire || p3_discard, thisFlush = fencei, lastFlush = false.B)
 
   val p3_pmp_fire = p3_valid
   val pmpExcpAF = fromPMP.instr
@@ -201,8 +205,15 @@ class IPrefetchPipe(implicit p: Parameters) extends  IPrefetchModule
   }
 
   p3_ready := toMissUnit.enqReq.ready || !enableBit
-  p3_fire  := toMissUnit.enqReq.fire()
-
+  p3_fire  := toMissUnit.enqReq.fire() || fencei
+ 
+  when(fencei){
+    maxPrefetchCoutner := 0.U
+    prefetch_dir.foreach(_.valid := false.B)
+    io.fencei.done := true.B
+  }.otherwise {
+    io.fencei.done := false.B
+  }
 }
 
 class IPrefetchEntry(edge: TLEdgeOut, id: Int)(implicit p: Parameters) extends ICacheMissUnitModule
@@ -211,6 +222,7 @@ class IPrefetchEntry(edge: TLEdgeOut, id: Int)(implicit p: Parameters) extends I
     val id = Input(UInt(log2Ceil(PortNumber + nPrefetchEntries).W))
 
     val req = Flipped(DecoupledIO(new PIQReq))
+  //  val fencei = Flipped(new FenceIBundle)
 
     //tilelink channel
     val mem_hint = DecoupledIO(new TLBundleA(edge.bundle))
@@ -234,7 +246,10 @@ class IPrefetchEntry(edge: TLEdgeOut, id: Int)(implicit p: Parameters) extends I
 
   io.req.ready := (state === s_idle)
   io.mem_hint.valid := (state === s_send_hint)
-
+  
+  // val fencei = io.fencei.start
+  // io.fencei.done = false.B
+  // when(fencei){state = s_ilde}
   //state change
   switch(state) {
     is(s_idle) {
