@@ -223,7 +223,7 @@ case class XSCoreParameters
     nMissEntries = 2,
     nProbeEntries = 2,
     nPrefetchEntries = 2,
-    hasPrefetch = false,
+    hasPrefetch = true, // false,
   ),
   dcacheParametersOpt: Option[DCacheParameters] = Some(DCacheParameters(
     tagECC = Some("secded"),
